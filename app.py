@@ -68,6 +68,7 @@ def detect_hazard():
         "success": True,
         "hazard_detected": result["hazard_detected"],
         "hazard_type": result["hazard_type"],
+        "severity": result["severity"],
         "message": result["message"]
     })
 

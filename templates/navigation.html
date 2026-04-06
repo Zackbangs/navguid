@@ -485,7 +485,12 @@
                 hazardStatus.textContent = data.message;
 
                 if (data.hazard_detected && canSpeakHazard(data.hazard_type, data.message)) {
-                    speakText(data.message, true);
+    if (data.severity === "urgent") {
+        speakText(data.message, true);
+    } else if (data.severity === "warning") {
+        speakText(data.message, true);
+    } else {
+        speakText(data.message, false);;
                 }
 
                 if (!data.hazard_detected) {
