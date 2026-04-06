@@ -1,0 +1,45 @@
+{
+  "name": "Shopping Centre",
+  "nodes": {
+    "ENTRANCE": {
+      "label": "Main Entrance",
+      "direction_hint": "Walk forward"
+    },
+    "INFO_DESK": {
+      "label": "Information Desk",
+      "direction_hint": "Continue straight"
+    },
+    "CORRIDOR_B": {
+      "label": "Corridor B",
+      "direction_hint": "Turn left"
+    },
+    "FOOD_COURT": {
+      "label": "Food Court",
+      "direction_hint": "Walk ahead"
+    },
+    "EXIT": {
+      "label": "Exit",
+      "direction_hint": "Turn toward the exit"
+    }
+  },
+  "edges": {
+    "ENTRANCE": {
+      "INFO_DESK": 1
+    },
+    "INFO_DESK": {
+      "ENTRANCE": 1,
+      "CORRIDOR_B": 1
+    },
+    "CORRIDOR_B": {
+      "INFO_DESK": 1,
+      "FOOD_COURT": 1,
+      "EXIT": 2
+    },
+    "FOOD_COURT": {
+      "CORRIDOR_B": 1
+    },
+    "EXIT": {
+      "CORRIDOR_B": 2
+    }
+  }
+}

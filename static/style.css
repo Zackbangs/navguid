@@ -1,0 +1,145 @@
+body {
+    font-family: Arial, sans-serif;
+    background: #f4f7fb;
+    margin: 0;
+    padding: 0;
+}
+
+.container {
+    max-width: 900px;
+    margin: 40px auto;
+    background: white;
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+h1, h2, h3 {
+    color: #1f2d3d;
+}
+
+p {
+    color: #444;
+    line-height: 1.6;
+}
+
+label {
+    display: block;
+    margin-top: 18px;
+    margin-bottom: 8px;
+    font-weight: bold;
+}
+
+select,
+input,
+button {
+    width: 100%;
+    padding: 14px;
+    font-size: 17px;
+    margin-bottom: 12px;
+    border-radius: 10px;
+    border: 1px solid #ccc;
+    box-sizing: border-box;
+}
+
+button,
+.button {
+    background: #1d4ed8;
+    color: white;
+    text-decoration: none;
+    text-align: center;
+    display: inline-block;
+    cursor: pointer;
+    border: none;
+    font-weight: bold;
+}
+
+.button {
+    padding: 12px 18px;
+    border-radius: 8px;
+    margin-top: 15px;
+}
+
+.result-box,
+.step-box,
+.hazard-box {
+    margin-top: 25px;
+    padding: 20px;
+    background: #f8fafc;
+    border-radius: 10px;
+    border: 1px solid #dbe3ea;
+}
+
+.current-step-text {
+    font-size: 20px;
+    font-weight: bold;
+    color: #0f172a;
+    background: #eef4ff;
+    padding: 16px;
+    border-radius: 10px;
+    margin-top: 10px;
+    margin-bottom: 15px;
+}
+
+.button-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.back-link {
+    display: inline-block;
+    margin-top: 20px;
+    text-decoration: none;
+    color: #1d4ed8;
+}
+
+.section-line {
+    margin: 35px 0;
+    border: none;
+    border-top: 1px solid #dbe3ea;
+}
+
+.safety-banner {
+    background: #fff7ed;
+    border: 1px solid #fdba74;
+    color: #9a3412;
+    padding: 14px;
+    border-radius: 10px;
+    margin-bottom: 24px;
+    font-weight: bold;
+}
+.camera-feed {
+    width: 100%;
+    margin-top: 16px;
+    border-radius: 10px;
+    background: #000;
+    min-height: 220px;
+    object-fit: cover;
+}
+.voice-box {
+    margin-bottom: 25px;
+    padding: 20px;
+    background: #eef6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 10px;
+}
+.voice-box {
+    margin-bottom: 25px;
+    padding: 20px;
+    background: #eef6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 10px;
+}
+
+.talk-button {
+    font-size: 22px;
+    padding: 18px;
+    margin-top: 10px;
+}
+
+.hint-text {
+    margin-top: 12px;
+    font-size: 14px;
+    color: #475569;
+}

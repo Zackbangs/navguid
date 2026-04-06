@@ -1,0 +1,17 @@
+{
+  "nodes": [
+    { "id": "entrance", "name": "Main Entrance" },
+    { "id": "reception", "name": "Reception" },
+    { "id": "hallway_a", "name": "Hallway A" },
+    { "id": "lift", "name": "Lift" },
+    { "id": "room_g12", "name": "Room G12" },
+    { "id": "toilet", "name": "Accessible Toilet" }
+  ],
+  "edges": [
+    { "from": "entrance", "to": "reception", "distance": 5 },
+    { "from": "reception", "to": "hallway_a", "distance": 4 },
+    { "from": "hallway_a", "to": "lift", "distance": 3 },
+    { "from": "hallway_a", "to": "room_g12", "distance": 6 },
+    { "from": "lift", "to": "toilet", "distance": 2 }
+  ]
+}

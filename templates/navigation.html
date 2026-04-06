@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NavGuid - Navigation</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>NavGuid Navigation</h1>
+
+        <div class="safety-banner">
+            This app provides navigation assistance only. Please continue using your cane,
+            guide support, and safe crossing judgment at all times.
+        </div>
+
+        <div class="voice-box">
+            <h2>Voice Assistant</h2>
+            <p id="voiceStatus">Tap the button and speak your command.</p>
+            <button type="button" class="talk-button" onclick="startVoiceAssistant()">
+                Talk to NavGuid
+            </button>
+            <p class="hint-text">
+                Try saying: “Take me to Rundle Mall”, “Next step”, “Repeat step”, “Start hazard monitoring”
+            </p>
+        </div>
+
+        <h2>Indoor Navigation</h2>
+
+        <label for="building">Select Building</label>
+        <select id="building">
+            <option value="torrens">Torrens</option>
+        </select>
+
+        <label for="start">Current Location</label>
+        <select id="start">
+            <option value="entrance">Main Entrance</option>
+            <option value="reception">Reception</option>
+            <option value="hallway_a">Hallway A</option>
+            <option value="lift">Lift</option>
+            <option value="room_g12">Room G12</option>
+            <option value="toilet">Accessible Toilet</option>
+        </select>
+
+        <label for="destination">Destination</label>
+        <select id="destination">
+            <option value="entrance">Main Entrance</option>
+            <option value="reception">Reception</option>
+            <option value="hallway_a">Hallway A</option>
+            <option value="lift">Lift</option>
+            <option value="room_g12">Room G12</option>
+            <option value="toilet">Accessible Toilet</option>
+        </select>
+
+        <button onclick="startIndoorNavigation()">Navigate Indoor</button>
+
+        <div id="result" class="result-box"></div>
+
+        <hr class="section-line">
+
+        <h2>Outdoor Navigation</h2>
+
+        <label for="currentLat">Current Latitude</label>
+        <input type="text" id="currentLat" placeholder="Latitude" readonly>
+
+        <label for="currentLon">Current Longitude</label>
+        <input type="text" id="currentLon" placeholder="Longitude" readonly>
+
+        <button type="button" onclick="useMyLocation()">Use My Location</button>
+
+        <label for="outdoorDestination">Destination</label>
+        <input
+            type="text"
+            id="outdoorDestination"
+            placeholder="Enter destination e.g. Adelaide Railway Station"
+        >
+
+        <button type="button" onclick="startOutdoorNavigation()">Start Outdoor Navigation</button>
+
+        <div id="outdoorResult" class="result-box"></div>
+
+        <div class="step-box">
+            <h3>Current Spoken Step</h3>
+            <p id="stepCounter">No route loaded yet.</p>
+            <div id="currentStepText" class="current-step-text">
+                Waiting for route instructions...
+            </div>
+
+            <div class="button-group">
+                <button type="button" onclick="previousStep()">Previous Step</button>
+                <button type="button" onclick="repeatStep()">Repeat Step</button>
+                <button type="button" onclick="nextStep()">Next Step</button>
+                <button type="button" onclick="stopVoice()">Stop Voice</button>
+            </div>
+        </div>
+
+        <div class="hazard-box">
+            <h3>Hazard Alerts</h3>
+            <p id="hazardStatus">No hazard detected.</p>
+
+            <div class="button-group">
+                <button type="button" onclick="startHazardMonitoring()">Start Hazard Monitoring</button>
+                <button type="button" onclick="stopHazardMonitoring()">Stop Hazard Monitoring</button>
+                <button type="button" onclick="simulateHazard('crossing')">Simulate Crossing Ahead</button>
+                <button type="button" onclick="clearHazard()">Clear Hazard</button>
+            </div>
+
+            <video id="cameraFeed" autoplay playsinline muted class="camera-feed"></video>
+            <canvas id="captureCanvas" style="display:none;"></canvas>
+        </div>
+
+        <a class="back-link" href="{{ url_for('home') }}">← Back to Home</a>
+    </div>
+
+    <script>
+        let outdoorSteps = [];
+        let currentStepIndex = 0;
+        let cameraStream = null;
+        let monitoringInterval = null;
+        let lastSpokenHazard = "";
+        let lastHazardTime = 0;
+        let lastHazardType = "";
+        let navigationStarted = false;
+        let voiceRecognitionActive = false;
+
+        const HAZARD_COOLDOWN_MS = 7000;
+
+        async function startIndoorNavigation() {
+            const building = document.getElementById("building").value;
+            const start = document.getElementById("start").value;
+            const destination = document.getElementById("destination").value;
+            const resultBox = document.getElementById("result");
+
+            resultBox.innerHTML = "Loading indoor route...";
+
+            try {
+                const response = await fetch("/navigate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        building: building,
+                        start: start,
+                        destination: destination
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!data.success) {
+                    resultBox.innerHTML = `<p>${data.message}</p>`;
+                    return;
+                }
+
+                let html = "<h3>Indoor Route Steps</h3><ol>";
+                data.steps.forEach(step => {
+                    html += `<li>${step}</li>`;
+                });
+                html += "</ol>";
+
+                resultBox.innerHTML = html;
+            } catch (error) {
+                resultBox.innerHTML = "<p>An error occurred while generating the indoor route.</p>";
+            }
+        }
+
+        function speakText(text, priority = false) {
+            if (!("speechSynthesis" in window)) {
+                return;
+            }
+
+            if (priority) {
+                window.speechSynthesis.cancel();
+            }
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = 0.92;
+            utterance.pitch = 1;
+            utterance.volume = 1;
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function stopVoice() {
+            if ("speechSynthesis" in window) {
+                window.speechSynthesis.cancel();
+            }
+        }
+
+        function cleanStepForBlindUser(step) {
+            let cleaned = step;
+            cleaned = cleaned.replace(/slight right/gi, "slightly right");
+            cleaned = cleaned.replace(/slight left/gi, "slightly left");
+            cleaned = cleaned.replace(/continue/gi, "walk straight");
+            cleaned = cleaned.replace(/onto/gi, "on");
+            cleaned = cleaned.replace(/for (\d+) metres/gi, "for $1 metres");
+            return cleaned;
+        }
+
+        function updateCurrentStepDisplay() {
+            const counter = document.getElementById("stepCounter");
+            const currentStepText = document.getElementById("currentStepText");
+
+            if (!outdoorSteps.length) {
+                counter.textContent = "No route loaded yet.";
+                currentStepText.textContent = "Waiting for route instructions...";
+                return;
+            }
+
+            counter.textContent = `Step ${currentStepIndex + 1} of ${outdoorSteps.length}`;
+            currentStepText.textContent = outdoorSteps[currentStepIndex];
+        }
+
+        function speakCurrentStep() {
+            if (!outdoorSteps.length) return;
+            const step = cleanStepForBlindUser(outdoorSteps[currentStepIndex]);
+            speakText(step, true);
+        }
+
+        function nextStep() {
+            if (!outdoorSteps.length) return;
+
+            if (currentStepIndex < outdoorSteps.length - 1) {
+                currentStepIndex += 1;
+                updateCurrentStepDisplay();
+                speakCurrentStep();
+            } else {
+                speakText("You are already at the final step.", true);
+            }
+        }
+
+        function previousStep() {
+            if (!outdoorSteps.length) return;
+
+            if (currentStepIndex > 0) {
+                currentStepIndex -= 1;
+                updateCurrentStepDisplay();
+                speakCurrentStep();
+            } else {
+                speakText("You are already at the first step.", true);
+            }
+        }
+
+        function repeatStep() {
+            if (!outdoorSteps.length) {
+                speakText("No route is loaded yet.", true);
+                return;
+            }
+            speakCurrentStep();
+        }
+
+        function getCurrentLocationPromise() {
+            return new Promise((resolve, reject) => {
+                if (!navigator.geolocation) {
+                    reject(new Error("Geolocation is not supported in this browser."));
+                    return;
+                }
+
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        resolve(position);
+                    },
+                    function(error) {
+                        reject(error);
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 0
+                    }
+                );
+            });
+        }
+
+        async function useMyLocation() {
+            const resultBox = document.getElementById("outdoorResult");
+            resultBox.innerHTML = "<p>Getting your current location...</p>";
+
+            try {
+                const position = await getCurrentLocationPromise();
+                document.getElementById("currentLat").value = position.coords.latitude;
+                document.getElementById("currentLon").value = position.coords.longitude;
+                resultBox.innerHTML = "<p>Current location loaded.</p>";
+            } catch (error) {
+                resultBox.innerHTML = "<p>Could not get your location. Please allow location access.</p>";
+            }
+        }
+
+        async function startOutdoorNavigation() {
+            const startLat = document.getElementById("currentLat").value;
+            const startLon = document.getElementById("currentLon").value;
+            const destination = document.getElementById("outdoorDestination").value.trim();
+            const resultBox = document.getElementById("outdoorResult");
+
+            if (!startLat || !startLon) {
+                resultBox.innerHTML = "<p>Please click 'Use My Location' first.</p>";
+                return false;
+            }
+
+            if (!destination) {
+                resultBox.innerHTML = "<p>Please enter an outdoor destination.</p>";
+                return false;
+            }
+
+            resultBox.innerHTML = "<p>Generating outdoor walking route...</p>";
+
+            try {
+                const response = await fetch("/outdoor-navigate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        start_lat: startLat,
+                        start_lon: startLon,
+                        destination: destination
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!data.success) {
+                    resultBox.innerHTML = `<p>${data.message}</p>`;
+                    return false;
+                }
+
+                outdoorSteps = data.steps || [];
+                currentStepIndex = 0;
+                navigationStarted = true;
+
+                let html = `
+                    <h3>Outdoor Route</h3>
+                    <p><strong>Destination:</strong> ${data.destination_name}</p>
+                    <p><strong>Distance:</strong> ${data.distance_m} metres</p>
+                    <p><strong>Estimated Time:</strong> ${data.duration_min} minutes</p>
+                    <ol>
+                `;
+
+                outdoorSteps.forEach(step => {
+                    html += `<li>${step}</li>`;
+                });
+
+                html += "</ol>";
+
+                resultBox.innerHTML = html;
+                updateCurrentStepDisplay();
+                speakText(`Route ready to ${data.destination_name}.`, true);
+                setTimeout(() => {
+                    speakCurrentStep();
+                }, 1200);
+
+                return true;
+            } catch (error) {
+                resultBox.innerHTML = "<p>An error occurred while generating the outdoor route.</p>";
+                return false;
+            }
+        }
+
+        function canSpeakHazard(hazardType, message) {
+            const now = Date.now();
+
+            if (hazardType !== lastHazardType) {
+                lastHazardType = hazardType;
+                lastHazardTime = now;
+                lastSpokenHazard = message;
+                return true;
+            }
+
+            if (now - lastHazardTime >= HAZARD_COOLDOWN_MS) {
+                lastHazardTime = now;
+                lastSpokenHazard = message;
+                return true;
+            }
+
+            return false;
+        }
+
+        function simulateHazard(type) {
+            const hazardStatus = document.getElementById("hazardStatus");
+            let message = "";
+            let hazardType = type;
+
+            if (type === "crossing") {
+                message = "Crossing ahead. Please slow down and use caution.";
+            } else if (type === "obstacle") {
+                message = "Obstacle ahead. Stop and check your path.";
+            } else {
+                message = "Possible hazard detected. Please stop and check your path.";
+            }
+
+            hazardStatus.textContent = message;
+
+            if (canSpeakHazard(hazardType, message)) {
+                speakText(message, true);
+            }
+        }
+
+        function clearHazard() {
+            const hazardStatus = document.getElementById("hazardStatus");
+            hazardStatus.textContent = "No hazard detected.";
+            lastSpokenHazard = "";
+            lastHazardType = "";
+            lastHazardTime = 0;
+        }
+
+        async function startHazardMonitoring() {
+            const hazardStatus = document.getElementById("hazardStatus");
+            const video = document.getElementById("cameraFeed");
+
+            try {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    hazardStatus.textContent = "Camera access is not supported on this device.";
+                    return;
+                }
+
+                if (!cameraStream) {
+                    cameraStream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: "environment" },
+                        audio: false
+                    });
+                    video.srcObject = cameraStream;
+                }
+
+                hazardStatus.textContent = "Hazard monitoring started.";
+
+                if (monitoringInterval) {
+                    clearInterval(monitoringInterval);
+                }
+
+                monitoringInterval = setInterval(captureAndDetectHazard, 3000);
+                speakText("Hazard monitoring started.", true);
+
+            } catch (error) {
+                hazardStatus.textContent = "Could not access the camera. Please allow camera permission.";
+            }
+        }
+
+        function stopHazardMonitoring() {
+            const hazardStatus = document.getElementById("hazardStatus");
+            const video = document.getElementById("cameraFeed");
+
+            if (monitoringInterval) {
+                clearInterval(monitoringInterval);
+                monitoringInterval = null;
+            }
+
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+                cameraStream = null;
+            }
+
+            video.srcObject = null;
+            hazardStatus.textContent = "Hazard monitoring stopped.";
+            speakText("Hazard monitoring stopped.", true);
+        }
+
+        async function captureAndDetectHazard() {
+            const video = document.getElementById("cameraFeed");
+            const canvas = document.getElementById("captureCanvas");
+            const hazardStatus = document.getElementById("hazardStatus");
+
+            if (!video.videoWidth || !video.videoHeight) {
+                return;
+            }
+
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            const context = canvas.getContext("2d");
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            const frameData = canvas.toDataURL("image/jpeg", 0.7);
+
+            try {
+                const response = await fetch("/detect-hazard", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ frame: frameData })
+                });
+
+                const data = await response.json();
+
+                if (!data.success) {
+                    hazardStatus.textContent = "Hazard detection failed.";
+                    return;
+                }
+
+                hazardStatus.textContent = data.message;
+
+                if (data.hazard_detected && canSpeakHazard(data.hazard_type, data.message)) {
+                    speakText(data.message, true);
+                }
+
+                if (!data.hazard_detected) {
+                    lastSpokenHazard = "";
+                    lastHazardType = "";
+                }
+            } catch (error) {
+                hazardStatus.textContent = "Error while checking hazards.";
+            }
+        }
+
+        function startVoiceAssistant() {
+            const voiceStatus = document.getElementById("voiceStatus");
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+            if (!SpeechRecognition) {
+                voiceStatus.textContent = "Voice recognition is not supported on this device.";
+                speakText("Voice recognition is not supported on this device.", true);
+                return;
+            }
+
+            if (voiceRecognitionActive) {
+                return;
+            }
+
+            const recognition = new SpeechRecognition();
+            recognition.lang = "en-AU";
+            recognition.interimResults = false;
+            recognition.maxAlternatives = 1;
+
+            voiceRecognitionActive = true;
+            voiceStatus.textContent = "Listening... please speak now.";
+            speakText("Listening.", true);
+
+            recognition.start();
+
+            recognition.onresult = function(event) {
+                const command = event.results[0][0].transcript.toLowerCase().trim();
+                voiceStatus.textContent = `Heard: ${command}`;
+                handleVoiceCommand(command);
+            };
+
+            recognition.onerror = function() {
+                voiceStatus.textContent = "Voice recognition failed. Please try again.";
+                speakText("Voice recognition failed. Please try again.", true);
+            };
+
+            recognition.onend = function() {
+                voiceRecognitionActive = false;
+                if (voiceStatus.textContent === "Listening... please speak now.") {
+                    voiceStatus.textContent = "No speech detected. Try again.";
+                }
+            };
+        }
+
+        async function autoStartNavigationToDestination(destination) {
+            speakText(`Setting destination to ${destination}. Getting your location now.`, true);
+
+            try {
+                const position = await getCurrentLocationPromise();
+                document.getElementById("currentLat").value = position.coords.latitude;
+                document.getElementById("currentLon").value = position.coords.longitude;
+                document.getElementById("outdoorDestination").value = destination;
+
+                speakText(`Location loaded. Starting navigation to ${destination}.`, true);
+
+                const success = await startOutdoorNavigation();
+
+                if (!success) {
+                    speakText("I could not start navigation. Please try again.", true);
+                }
+            } catch (error) {
+                speakText("I could not get your location. Please allow location access and try again.", true);
+            }
+        }
+
+        async function handleVoiceCommand(command) {
+            if (command.includes("use my location")) {
+                await useMyLocation();
+                speakText("Getting your current location.", true);
+                return;
+            }
+
+            if (command.includes("start navigation")) {
+                const destination = document.getElementById("outdoorDestination").value.trim();
+
+                if (!destination) {
+                    speakText("Please say your destination first.", true);
+                    return;
+                }
+
+                await startOutdoorNavigation();
+                return;
+            }
+
+            if (command.includes("next step")) {
+                nextStep();
+                return;
+            }
+
+            if (command.includes("previous step")) {
+                previousStep();
+                return;
+            }
+
+            if (command.includes("repeat step")) {
+                repeatStep();
+                return;
+            }
+
+            if (command.includes("stop voice")) {
+                stopVoice();
+                return;
+            }
+
+            if (command.includes("start hazard monitoring")) {
+                await startHazardMonitoring();
+                return;
+            }
+
+            if (command.includes("stop hazard monitoring")) {
+                stopHazardMonitoring();
+                return;
+            }
+
+            if (command.includes("where am i")) {
+                const lat = document.getElementById("currentLat").value;
+                const lon = document.getElementById("currentLon").value;
+
+                if (lat && lon) {
+                    speakText(`Your current coordinates are latitude ${lat} and longitude ${lon}.`, true);
+                } else {
+                    speakText("Your current location has not been loaded yet.", true);
+                }
+                return;
+            }
+
+            if (command.includes("what is my destination")) {
+                const destination = document.getElementById("outdoorDestination").value.trim();
+
+                if (destination) {
+                    speakText(`Your destination is ${destination}.`, true);
+                } else {
+                    speakText("No destination has been set yet.", true);
+                }
+                return;
+            }
+
+            if (command.includes("take me to")) {
+                const destination = command.replace("take me to", "").trim();
+
+                if (destination) {
+                    await autoStartNavigationToDestination(destination);
+                    return;
+                }
+            }
+
+            speakText("Command not recognised. Please try again.", true);
+        }
+    </script>
+</body>
+</html>
