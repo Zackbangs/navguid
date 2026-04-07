@@ -106,7 +106,11 @@
                 <button type="button" onclick="clearHazard()">Clear Hazard</button>
             </div>
 
-            <video id="cameraFeed" autoplay playsinline muted class="camera-feed"></video>
+            <div style="position: relative; width: 100%;">
+                <video id="cameraFeed" autoplay playsinline muted class="camera-feed"></video>
+                <canvas id="overlayCanvas" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none;"></canvas>
+            </div>
+
             <canvas id="captureCanvas" style="display:none;"></canvas>
         </div>
 
@@ -127,8 +131,8 @@
         let navigationStarted = false;
         let voiceRecognitionActive = false;
 
-        const HAZARD_COOLDOWN_MS = 4000;
-        const HAZARD_CAPTURE_INTERVAL_MS = 850;
+        const HAZARD_COOLDOWN_MS = 3500;
+        const HAZARD_CAPTURE_INTERVAL_MS = 700;
 
         async function startIndoorNavigation() {
             const building = document.getElementById("building").value;
@@ -372,17 +376,14 @@
         }
 
         function buildHazardSpeech(data) {
+            if (data.message) {
+                return data.message;
+            }
+
             const label = formatHazardLabel(data.hazard_type);
+            if (!label) return "Hazard detected.";
 
-            if (!label) {
-                return data.message || "Hazard detected.";
-            }
-
-            if (data.hazard_type === "low_visibility" || data.hazard_type === "step_or_curb") {
-                return data.message || `${label} ahead.`;
-            }
-
-            return `${label} ahead. ${data.message}`;
+            return `${label} ahead.`;
         }
 
         function canSpeakHazard(hazardType, severity, message) {
@@ -405,6 +406,64 @@
             return false;
         }
 
+        function getOverlayCanvas() {
+            return document.getElementById("overlayCanvas");
+        }
+
+        function clearOverlay() {
+            const overlay = getOverlayCanvas();
+            const ctx = overlay.getContext("2d");
+            ctx.clearRect(0, 0, overlay.width, overlay.height);
+        }
+
+        function getBoxColor(severity) {
+            if (severity === "urgent") return "#ff3b30";
+            if (severity === "warning") return "#ff9500";
+            return "#ffd60a";
+        }
+
+        function drawDetections(detections) {
+            const video = document.getElementById("cameraFeed");
+            const overlay = getOverlayCanvas();
+            const ctx = overlay.getContext("2d");
+
+            if (!video.videoWidth || !video.videoHeight) return;
+
+            overlay.width = video.videoWidth;
+            overlay.height = video.videoHeight;
+
+            ctx.clearRect(0, 0, overlay.width, overlay.height);
+            ctx.lineWidth = 3;
+            ctx.font = "18px Arial";
+
+            detections.forEach((item) => {
+                if (!item.bbox) return;
+
+                const { x1, y1, x2, y2 } = item.bbox;
+                const width = x2 - x1;
+                const height = y2 - y1;
+                const color = getBoxColor(item.severity);
+
+                ctx.strokeStyle = color;
+                ctx.fillStyle = color;
+                ctx.strokeRect(x1, y1, width, height);
+
+                const labelParts = [
+                    formatHazardLabel(item.hazard_type),
+                    item.distance_label ? item.distance_label.replaceAll("_", " ") : "",
+                    item.direction_label || ""
+                ].filter(Boolean);
+
+                const label = labelParts.join(" - ");
+                const textWidth = ctx.measureText(label).width + 12;
+                const textY = Math.max(24, y1 - 8);
+
+                ctx.fillRect(x1, textY - 20, textWidth, 24);
+                ctx.fillStyle = "#ffffff";
+                ctx.fillText(label, x1 + 6, textY - 3);
+            });
+        }
+
         function simulateHazard(type) {
             const hazardStatus = document.getElementById("hazardStatus");
             let message = "";
@@ -415,7 +474,7 @@
                 message = "Crossing ahead. Please slow down and use caution.";
                 severity = "warning";
             } else if (type === "obstacle") {
-                message = "Obstacle ahead. Stop and check your path.";
+                message = "Obstacle very close ahead. Stop and check your path.";
                 severity = "urgent";
             } else {
                 message = "Possible hazard detected. Please stop and check your path.";
@@ -437,6 +496,7 @@
             lastHazardType = "";
             lastHazardSeverity = "";
             lastHazardTime = 0;
+            clearOverlay();
         }
 
         function scheduleNextHazardCheck() {
@@ -508,6 +568,7 @@
             lastHazardSeverity = "";
             lastHazardTime = 0;
 
+            clearOverlay();
             hazardStatus.textContent = "Hazard monitoring stopped.";
             speakText("Hazard monitoring stopped.", true);
         }
@@ -530,7 +591,7 @@
                 const context = canvas.getContext("2d");
                 context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-                const frameData = canvas.toDataURL("image/jpeg", 0.6);
+                const frameData = canvas.toDataURL("image/jpeg", 0.55);
 
                 const response = await fetch("/detect-hazard", {
                     method: "POST",
@@ -542,8 +603,11 @@
 
                 if (!data.success) {
                     hazardStatus.textContent = "Hazard detection failed.";
+                    clearOverlay();
                     return;
                 }
+
+                drawDetections(data.detections || []);
 
                 const severityText = data.severity ? data.severity.toUpperCase() : "";
                 hazardStatus.textContent = severityText
@@ -564,9 +628,11 @@
                     lastSpokenHazard = "";
                     lastHazardType = "";
                     lastHazardSeverity = "";
+                    clearOverlay();
                 }
             } catch (error) {
                 hazardStatus.textContent = "Error while checking hazards.";
+                clearOverlay();
             } finally {
                 detectionInProgress = false;
             }

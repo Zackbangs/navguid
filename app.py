@@ -69,7 +69,11 @@ def detect_hazard():
         "hazard_detected": result["hazard_detected"],
         "hazard_type": result["hazard_type"],
         "severity": result["severity"],
-        "message": result["message"]
+        "message": result["message"],
+        "distance_label": result.get("distance_label"),
+        "direction_label": result.get("direction_label"),
+        "bbox": result.get("bbox"),
+        "detections": result.get("detections", [])
     })
 
 
