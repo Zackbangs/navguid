@@ -1,12 +1,43 @@
+import os
 import base64
 import cv2
 import numpy as np
+import torch
+from ultralytics import YOLO
+from ultralytics.nn.tasks import DetectionModel
+
+# Allowlist Ultralytics DetectionModel for torch weights loading
+# Needed because newer PyTorch defaults torch.load(weights_only=True)
+torch.serialization.add_safe_globals([DetectionModel])
+
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "yolov8n.pt")
+MODEL_PATH = os.path.abspath(MODEL_PATH)
+
+model = YOLO(MODEL_PATH)
+
+TARGET_CLASSES = {
+    "person": ("warning", "Warning. Person ahead."),
+    "bicycle": ("warning", "Warning. Bicycle ahead."),
+    "motorcycle": ("warning", "Warning. Motorcycle ahead."),
+    "car": ("warning", "Warning. Car ahead."),
+    "bus": ("urgent", "Urgent. Large vehicle ahead."),
+    "truck": ("urgent", "Urgent. Large vehicle ahead."),
+    "bench": ("caution", "Caution. Obstacle ahead."),
+    "chair": ("caution", "Caution. Obstacle ahead."),
+    "potted plant": ("caution", "Caution. Obstacle ahead."),
+    "fire hydrant": ("warning", "Warning. Pole-like obstacle ahead."),
+    "stop sign": ("caution", "Caution. Sign or pole ahead."),
+}
+
+CONFIDENCE_THRESHOLD = 0.40
+
+# Added tuning values for smoother and more stable hazard selection
+MIN_BOX_AREA_RATIO = 0.015
+CENTER_ZONE_WEIGHT = 1.25
+LOWER_SCREEN_BONUS = 1.15
 
 
-def decode_base64_image(data_url):
-    """
-    Convert base64 image from browser canvas into an OpenCV image.
-    """
+def decode_base64_image(data_url: str):
     if "," not in data_url:
         return None
 
@@ -26,32 +57,15 @@ def make_result(hazard_detected, hazard_type, severity, message):
     }
 
 
-def detect_low_visibility(gray_frame):
-    brightness = gray_frame.mean()
-
-    if brightness < 35:
-        return make_result(
-            True,
-            "low_visibility",
-            "warning",
-            "Warning. Very low visibility ahead. Please slow down."
-        )
-
-    if brightness < 50:
-        return make_result(
-            True,
-            "low_visibility",
-            "caution",
-            "Caution. Low visibility ahead."
-        )
-
-    return None
+def center_priority(x1, y1, x2, y2, width, height):
+    cx = (x1 + x2) / 2
+    cy = (y1 + y2) / 2
+    horizontal_penalty = abs(cx - width / 2) / (width / 2)
+    vertical_bonus = cy / height
+    return (vertical_bonus * LOWER_SCREEN_BONUS) - (horizontal_penalty * CENTER_ZONE_WEIGHT)
 
 
 def detect_step_or_curb(gray_frame, height, width):
-    """
-    Looks for strong horizontal edges in the lower walking area.
-    """
     lower_strip = gray_frame[
         int(height * 0.72):int(height * 0.92),
         int(width * 0.12):int(width * 0.88)
@@ -71,7 +85,6 @@ def detect_step_or_curb(gray_frame, height, width):
         return None
 
     horizontal_count = 0
-
     for line in lines:
         x1, y1, x2, y2 = line[0]
         if abs(y2 - y1) < 18:
@@ -96,142 +109,107 @@ def detect_step_or_curb(gray_frame, height, width):
     return None
 
 
-def detect_blocked_path(gray_frame, height, width):
-    """
-    Checks the main walking corridor in the center lower area.
-    """
-    front_zone = gray_frame[
-        int(height * 0.45):height,
-        int(width * 0.22):int(width * 0.78)
-    ]
+def detect_low_visibility(gray_frame):
+    brightness = gray_frame.mean()
 
-    edges = cv2.Canny(front_zone, 70, 160)
-    edge_ratio = np.count_nonzero(edges) / edges.size
-
-    blurred = cv2.GaussianBlur(front_zone, (5, 5), 0)
-    _, thresh = cv2.threshold(
-        blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
-    )
-    white_ratio = np.count_nonzero(thresh) / thresh.size
-
-    # Very cluttered front path
-    if edge_ratio > 0.18:
+    if brightness < 35:
         return make_result(
             True,
-            "blocked_path",
-            "urgent",
-            "Urgent. Path ahead may be blocked. Stop and check your path."
-        )
-
-    if edge_ratio > 0.13:
-        return make_result(
-            True,
-            "possible_obstacle",
+            "low_visibility",
             "warning",
-            "Warning. Possible obstacle ahead."
+            "Warning. Very low visibility ahead. Please slow down."
         )
 
-    # Unclear center view
-    if white_ratio < 0.18 or white_ratio > 0.82:
+    if brightness < 50:
         return make_result(
             True,
-            "path_unclear",
+            "low_visibility",
             "caution",
-            "Caution. Path ahead may be unclear."
+            "Caution. Low visibility ahead."
         )
 
     return None
 
 
-def detect_side_obstacle(gray_frame, height, width):
-    """
-    Compares left and right path complexity to suggest a partial blockage.
-    """
-    lower_zone = gray_frame[
-        int(height * 0.50):height,
-        int(width * 0.15):int(width * 0.85)
-    ]
+def _box_area_ratio(x1, y1, x2, y2, width, height):
+    box_area = max(0.0, (x2 - x1)) * max(0.0, (y2 - y1))
+    frame_area = float(width * height)
+    if frame_area <= 0:
+        return 0.0
+    return box_area / frame_area
 
-    zone_width = lower_zone.shape[1]
-    left_zone = lower_zone[:, :zone_width // 2]
-    right_zone = lower_zone[:, zone_width // 2:]
 
-    left_edges = cv2.Canny(left_zone, 70, 150)
-    right_edges = cv2.Canny(right_zone, 70, 150)
+def _is_relevant_box(x1, y1, x2, y2, width, height):
+    area_ratio = _box_area_ratio(x1, y1, x2, y2, width, height)
+    return area_ratio >= MIN_BOX_AREA_RATIO
 
-    left_ratio = np.count_nonzero(left_edges) / left_edges.size
-    right_ratio = np.count_nonzero(right_edges) / right_edges.size
 
-    difference = abs(left_ratio - right_ratio)
-
-    if difference > 0.08:
-        if left_ratio > right_ratio:
-            return make_result(
-                True,
-                "left_side_obstacle",
-                "caution",
-                "Caution. Path may be more blocked on your left side."
-            )
-        return make_result(
-            True,
-            "right_side_obstacle",
-            "caution",
-            "Caution. Path may be more blocked on your right side."
-        )
-
-    return None
+def _build_object_result(class_name):
+    severity, message = TARGET_CLASSES[class_name]
+    return {
+        "hazard_detected": True,
+        "hazard_type": class_name.replace(" ", "_"),
+        "severity": severity,
+        "message": message
+    }
 
 
 def detect_hazard_from_frame(frame):
-    """
-    Smarter rule-based hazard detection for NavGuid.
-
-    Current hazard types:
-    - low_visibility
-    - step_or_curb
-    - blocked_path
-    - possible_obstacle
-    - path_unclear
-    - left_side_obstacle
-    - right_side_obstacle
-    """
     if frame is None:
-        return make_result(
-            False,
-            None,
-            None,
-            "No valid frame available."
-        )
+        return make_result(False, None, None, "No valid frame available.")
 
     height, width = frame.shape[:2]
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-    # 1. Low visibility
-    result = detect_low_visibility(gray)
-    if result:
-        return result
+    visibility_result = detect_low_visibility(gray)
+    if visibility_result:
+        return visibility_result
 
-    # 2. Ground-level hazards first
-    result = detect_step_or_curb(gray, height, width)
-    if result:
-        return result
+    curb_result = detect_step_or_curb(gray, height, width)
+    if curb_result and curb_result["severity"] == "urgent":
+        return curb_result
 
-    # 3. Blocked path / front obstacle
-    result = detect_blocked_path(gray, height, width)
-    if result:
-        return result
+    results = model.predict(source=frame, verbose=False, conf=CONFIDENCE_THRESHOLD)
 
-    # 4. Left/right side awareness
-    result = detect_side_obstacle(gray, height, width)
-    if result:
-        return result
+    best_candidate = None
+    best_score = -999
 
-    return make_result(
-        False,
-        None,
-        None,
-        "No immediate hazard detected."
-    )
+    for result in results:
+        boxes = result.boxes
+        if boxes is None:
+            continue
+
+        for box in boxes:
+            cls_id = int(box.cls[0].item())
+            conf = float(box.conf[0].item())
+            class_name = model.names.get(cls_id, str(cls_id))
+
+            if class_name not in TARGET_CLASSES:
+                continue
+
+            x1, y1, x2, y2 = box.xyxy[0].tolist()
+
+            # Ignore very tiny detections to reduce noisy warnings
+            if not _is_relevant_box(x1, y1, x2, y2, width, height):
+                continue
+
+            area_ratio = _box_area_ratio(x1, y1, x2, y2, width, height)
+            position_score = center_priority(x1, y1, x2, y2, width, height)
+
+            # Prefer confident, central, lower-frame, and reasonably large obstacles
+            score = (conf * 1.8) + position_score + (area_ratio * 2.2)
+
+            if score > best_score:
+                best_candidate = _build_object_result(class_name)
+                best_score = score
+
+    if best_candidate:
+        return best_candidate
+
+    if curb_result:
+        return curb_result
+
+    return make_result(False, None, None, "No immediate hazard detected.")
 
 
 def detect_hazard_from_base64(data_url):

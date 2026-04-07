@@ -118,13 +118,17 @@
         let currentStepIndex = 0;
         let cameraStream = null;
         let monitoringInterval = null;
+        let monitoringActive = false;
+        let detectionInProgress = false;
         let lastSpokenHazard = "";
         let lastHazardTime = 0;
         let lastHazardType = "";
+        let lastHazardSeverity = "";
         let navigationStarted = false;
         let voiceRecognitionActive = false;
 
-        const HAZARD_COOLDOWN_MS = 7000;
+        const HAZARD_COOLDOWN_MS = 4000;
+        const HAZARD_CAPTURE_INTERVAL_MS = 850;
 
         async function startIndoorNavigation() {
             const building = document.getElementById("building").value;
@@ -353,19 +357,48 @@
             }
         }
 
-        function canSpeakHazard(hazardType, message) {
-            const now = Date.now();
+        function formatHazardLabel(hazardType) {
+            if (!hazardType) return "";
 
-            if (hazardType !== lastHazardType) {
-                lastHazardType = hazardType;
+            const spokenLabels = {
+                step_or_curb: "step or curb",
+                low_visibility: "low visibility",
+                fire_hydrant: "fire hydrant",
+                stop_sign: "stop sign",
+                potted_plant: "potted plant"
+            };
+
+            return spokenLabels[hazardType] || hazardType.replaceAll("_", " ");
+        }
+
+        function buildHazardSpeech(data) {
+            const label = formatHazardLabel(data.hazard_type);
+
+            if (!label) {
+                return data.message || "Hazard detected.";
+            }
+
+            if (data.hazard_type === "low_visibility" || data.hazard_type === "step_or_curb") {
+                return data.message || `${label} ahead.`;
+            }
+
+            return `${label} ahead. ${data.message}`;
+        }
+
+        function canSpeakHazard(hazardType, severity, message) {
+            const now = Date.now();
+            const speechKey = `${hazardType || ""}|${severity || ""}|${message || ""}`;
+
+            if (speechKey !== lastSpokenHazard) {
+                lastSpokenHazard = speechKey;
+                lastHazardType = hazardType || "";
+                lastHazardSeverity = severity || "";
                 lastHazardTime = now;
-                lastSpokenHazard = message;
                 return true;
             }
 
             if (now - lastHazardTime >= HAZARD_COOLDOWN_MS) {
                 lastHazardTime = now;
-                lastSpokenHazard = message;
                 return true;
             }
 
@@ -376,18 +409,23 @@
             const hazardStatus = document.getElementById("hazardStatus");
             let message = "";
             let hazardType = type;
+            let severity = "warning";
 
             if (type === "crossing") {
                 message = "Crossing ahead. Please slow down and use caution.";
+                severity = "warning";
             } else if (type === "obstacle") {
                 message = "Obstacle ahead. Stop and check your path.";
+                severity = "urgent";
             } else {
                 message = "Possible hazard detected. Please stop and check your path.";
+                severity = "warning";
             }
 
-            hazardStatus.textContent = message;
+            const severityText = severity ? severity.toUpperCase() : "";
+            hazardStatus.textContent = severityText ? `${severityText}: ${message}` : message;
 
-            if (canSpeakHazard(hazardType, message)) {
+            if (canSpeakHazard(hazardType, severity, message)) {
                 speakText(message, true);
             }
         }
@@ -397,7 +435,17 @@
             hazardStatus.textContent = "No hazard detected.";
             lastSpokenHazard = "";
             lastHazardType = "";
+            lastHazardSeverity = "";
             lastHazardTime = 0;
+        }
+
+        function scheduleNextHazardCheck() {
+            if (!monitoringActive) return;
+
+            monitoringInterval = setTimeout(async () => {
+                await captureAndDetectHazard();
+                scheduleNextHazardCheck();
+            }, HAZARD_CAPTURE_INTERVAL_MS);
         }
 
         async function startHazardMonitoring() {
@@ -418,14 +466,18 @@
                     video.srcObject = cameraStream;
                 }
 
-                hazardStatus.textContent = "Hazard monitoring started.";
+                monitoringActive = true;
+                detectionInProgress = false;
 
                 if (monitoringInterval) {
-                    clearInterval(monitoringInterval);
+                    clearTimeout(monitoringInterval);
+                    monitoringInterval = null;
                 }
 
-                monitoringInterval = setInterval(captureAndDetectHazard, 3000);
+                hazardStatus.textContent = "Hazard monitoring started.";
                 speakText("Hazard monitoring started.", true);
+
+                scheduleNextHazardCheck();
 
             } catch (error) {
                 hazardStatus.textContent = "Could not access the camera. Please allow camera permission.";
@@ -436,8 +488,11 @@
             const hazardStatus = document.getElementById("hazardStatus");
             const video = document.getElementById("cameraFeed");
 
+            monitoringActive = false;
+            detectionInProgress = false;
+
             if (monitoringInterval) {
-                clearInterval(monitoringInterval);
+                clearTimeout(monitoringInterval);
                 monitoringInterval = null;
             }
 
@@ -447,6 +502,12 @@
             }
 
             video.srcObject = null;
+
+            lastSpokenHazard = "";
+            lastHazardType = "";
+            lastHazardSeverity = "";
+            lastHazardTime = 0;
+
             hazardStatus.textContent = "Hazard monitoring stopped.";
             speakText("Hazard monitoring stopped.", true);
         }
@@ -456,19 +517,21 @@
             const canvas = document.getElementById("captureCanvas");
             const hazardStatus = document.getElementById("hazardStatus");
 
-            if (!video.videoWidth || !video.videoHeight) {
-                return;
-            }
+            if (!monitoringActive) return;
+            if (detectionInProgress) return;
+            if (!video.videoWidth || !video.videoHeight) return;
 
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-
-            const context = canvas.getContext("2d");
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-            const frameData = canvas.toDataURL("image/jpeg", 0.7);
+            detectionInProgress = true;
 
             try {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+
+                const context = canvas.getContext("2d");
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                const frameData = canvas.toDataURL("image/jpeg", 0.6);
+
                 const response = await fetch("/detect-hazard", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -482,23 +545,30 @@
                     return;
                 }
 
-                hazardStatus.textContent = data.message;
+                const severityText = data.severity ? data.severity.toUpperCase() : "";
+                hazardStatus.textContent = severityText
+                    ? `${severityText}: ${data.message}`
+                    : (data.message || "No immediate hazard detected.");
 
-                if (data.hazard_detected && canSpeakHazard(data.hazard_type, data.message)) {
-    if (data.severity === "urgent") {
-        speakText(data.message, true);
-    } else if (data.severity === "warning") {
-        speakText(data.message, true);
-    } else {
-        speakText(data.message, false);;
-                }
+                if (data.hazard_detected) {
+                    const speech = buildHazardSpeech(data);
 
-                if (!data.hazard_detected) {
+                    if (canSpeakHazard(data.hazard_type, data.severity, speech)) {
+                        if (data.severity === "urgent" || data.severity === "warning") {
+                            speakText(speech, true);
+                        } else {
+                            speakText(speech, false);
+                        }
+                    }
+                } else {
                     lastSpokenHazard = "";
                     lastHazardType = "";
+                    lastHazardSeverity = "";
                 }
             } catch (error) {
                 hazardStatus.textContent = "Error while checking hazards.";
+            } finally {
+                detectionInProgress = false;
             }
         }
 
