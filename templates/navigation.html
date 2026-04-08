@@ -429,7 +429,10 @@
                 low_visibility: "low visibility",
                 fire_hydrant: "fire hydrant",
                 stop_sign: "stop sign",
-                potted_plant: "potted plant"
+                potted_plant: "potted plant",
+                parking_meter: "parking meter",
+                traffic_light: "traffic light",
+                vertical_obstacle: "pole like obstacle"
             };
 
             return spokenLabels[hazardType] || hazardType.replaceAll("_", " ");
@@ -618,7 +621,11 @@
 
                 if (!cameraStream) {
                     cameraStream = await navigator.mediaDevices.getUserMedia({
-                        video: { facingMode: "environment" },
+                        video: {
+                            facingMode: { ideal: "environment" },
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 }
+                        },
                         audio: false
                     });
                     video.srcObject = cameraStream;
@@ -694,7 +701,7 @@
                 const context = canvas.getContext("2d");
                 context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-                const frameData = canvas.toDataURL("image/jpeg", 0.55);
+                const frameData = canvas.toDataURL("image/jpeg", 0.78);
 
                 const response = await fetch("/detect-hazard", {
                     method: "POST",

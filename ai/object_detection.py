@@ -25,27 +25,46 @@ TARGET_CLASSES = {
     "potted plant": ("caution", "Obstacle"),
     "fire hydrant": ("warning", "Pole-like obstacle"),
     "stop sign": ("caution", "Sign or pole"),
+    "parking meter": ("warning", "Pole-like obstacle"),
+    "traffic light": ("caution", "Pole-like obstacle"),
 }
 
-CONFIDENCE_THRESHOLD = 0.40
-MIN_BOX_AREA_RATIO = 0.012
-CENTER_ZONE_WEIGHT = 1.15
+CONFIDENCE_THRESHOLD = 0.25
+CENTER_ZONE_WEIGHT = 1.12
 LOWER_SCREEN_BONUS = 1.10
-MAX_RETURNED_DETECTIONS = 5
-PREDICT_IMGSZ = 416
+MAX_RETURNED_DETECTIONS = 6
+PREDICT_IMGSZ = 640
 
 CLASS_MIN_CONFIDENCE = {
-    "person": 0.38,
-    "bicycle": 0.40,
-    "motorcycle": 0.42,
-    "car": 0.42,
-    "bus": 0.40,
-    "truck": 0.40,
-    "bench": 0.45,
-    "chair": 0.45,
-    "potted plant": 0.45,
-    "fire hydrant": 0.42,
-    "stop sign": 0.42,
+    "person": 0.22,
+    "bicycle": 0.28,
+    "motorcycle": 0.30,
+    "car": 0.25,
+    "bus": 0.26,
+    "truck": 0.26,
+    "bench": 0.34,
+    "chair": 0.32,
+    "potted plant": 0.34,
+    "fire hydrant": 0.24,
+    "stop sign": 0.25,
+    "parking meter": 0.22,
+    "traffic light": 0.22,
+}
+
+CLASS_MIN_AREA_RATIO = {
+    "person": 0.0020,
+    "bicycle": 0.0035,
+    "motorcycle": 0.0035,
+    "car": 0.0040,
+    "bus": 0.0050,
+    "truck": 0.0050,
+    "bench": 0.0055,
+    "chair": 0.0035,
+    "potted plant": 0.0040,
+    "fire hydrant": 0.0018,
+    "stop sign": 0.0018,
+    "parking meter": 0.0016,
+    "traffic light": 0.0014,
 }
 
 TARGET_CLASS_IDS = None
@@ -108,10 +127,10 @@ def make_result(
 
 
 def center_priority(x1, y1, x2, y2, width, height):
-    cx = (x1 + x2) / 2
-    cy = (y1 + y2) / 2
-    horizontal_penalty = abs(cx - width / 2) / max(width / 2, 1)
-    vertical_bonus = cy / max(height, 1)
+    cx = (x1 + x2) / 2.0
+    cy = (y1 + y2) / 2.0
+    horizontal_penalty = abs(cx - width / 2.0) / max(width / 2.0, 1.0)
+    vertical_bonus = cy / max(float(height), 1.0)
     return (vertical_bonus * LOWER_SCREEN_BONUS) - (horizontal_penalty * CENTER_ZONE_WEIGHT)
 
 
@@ -203,8 +222,8 @@ def _box_bottom_ratio(y2, height):
 
 def _get_direction_label(x1, x2, width):
     cx = (x1 + x2) / 2.0
-    left_boundary = width * 0.36
-    right_boundary = width * 0.64
+    left_boundary = width * 0.35
+    right_boundary = width * 0.65
 
     if cx < left_boundary:
         return "left"
@@ -218,7 +237,7 @@ def _get_distance_label(area_ratio, bottom_ratio):
         return "very_close"
     if area_ratio >= 0.08 or bottom_ratio >= 0.84:
         return "close"
-    if area_ratio >= 0.03 or bottom_ratio >= 0.72:
+    if area_ratio >= 0.025 or bottom_ratio >= 0.70:
         return "ahead"
     return "far"
 
@@ -248,14 +267,15 @@ def _is_relevant_box(class_name, conf, x1, y1, x2, y2, width, height):
         return False
 
     area_ratio = _box_area_ratio(x1, y1, x2, y2, width, height)
-    if area_ratio < MIN_BOX_AREA_RATIO:
+    min_area_ratio = CLASS_MIN_AREA_RATIO.get(class_name, 0.0035)
+    if area_ratio < min_area_ratio:
         return False
 
     box_width = max(1.0, x2 - x1)
     box_height = max(1.0, y2 - y1)
     aspect_ratio = box_height / box_width
 
-    if class_name == "person" and aspect_ratio < 0.8:
+    if class_name == "person" and aspect_ratio < 0.55:
         return False
 
     return True
@@ -294,9 +314,9 @@ def _build_detection_entry(class_name, severity, conf, x1, y1, x2, y2, width, he
     position_score = center_priority(x1, y1, x2, y2, width, height)
 
     score = (
-        (conf * 1.8)
+        (conf * 1.7)
         + position_score
-        + (area_ratio * 2.4)
+        + (area_ratio * 2.6)
         + _severity_weight(severity)
     )
 
@@ -330,6 +350,82 @@ def _build_detection_entry(class_name, severity, conf, x1, y1, x2, y2, width, he
     }
 
 
+def detect_vertical_obstacle(gray_frame, height, width):
+    roi_x1 = int(width * 0.10)
+    roi_x2 = int(width * 0.90)
+    roi_y1 = int(height * 0.18)
+    roi_y2 = int(height * 0.95)
+
+    roi = gray_frame[roi_y1:roi_y2, roi_x1:roi_x2]
+    if roi.size == 0:
+        return None
+
+    blurred = cv2.GaussianBlur(roi, (5, 5), 0)
+    edges = cv2.Canny(blurred, 70, 170)
+
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    best_candidate = None
+    best_score = -999.0
+    roi_h, roi_w = roi.shape[:2]
+
+    for contour in contours:
+        x, y, w, h = cv2.boundingRect(contour)
+
+        if h < roi_h * 0.16:
+            continue
+
+        width_ratio = w / max(float(roi_w), 1.0)
+        height_ratio = h / max(float(roi_h), 1.0)
+        if width_ratio > 0.12:
+            continue
+        if width_ratio < 0.008:
+            continue
+        if height_ratio < 0.18:
+            continue
+
+        x1 = roi_x1 + x
+        y1 = roi_y1 + y
+        x2 = x1 + w
+        y2 = y1 + h
+
+        area_ratio = _box_area_ratio(x1, y1, x2, y2, width, height)
+        if area_ratio < 0.001:
+            continue
+
+        direction_label = _get_direction_label(x1, x2, width)
+        distance_label = _get_distance_label(area_ratio, _box_bottom_ratio(y2, height))
+        score = (height_ratio * 1.4) + center_priority(x1, y1, x2, y2, width, height)
+
+        if distance_label == "very_close":
+            score += 0.5
+        elif distance_label == "close":
+            score += 0.25
+
+        if score > best_score:
+            severity = "warning" if distance_label in ("very_close", "close") else "caution"
+            message = _build_object_message("vertical obstacle", distance_label, direction_label, severity)
+            best_candidate = {
+                "hazard_detected": True,
+                "hazard_type": "vertical_obstacle",
+                "severity": severity,
+                "message": message,
+                "distance_label": distance_label,
+                "direction_label": direction_label,
+                "bbox": {
+                    "x1": int(x1),
+                    "y1": int(y1),
+                    "x2": int(x2),
+                    "y2": int(y2)
+                },
+                "conf": 0.5,
+                "score": score
+            }
+            best_score = score
+
+    return best_candidate
+
+
 def detect_hazard_from_frame(frame):
     if frame is None:
         return make_result(False, None, None, "No valid frame available.")
@@ -352,7 +448,7 @@ def detect_hazard_from_frame(frame):
         verbose=False,
         conf=CONFIDENCE_THRESHOLD,
         imgsz=PREDICT_IMGSZ,
-        max_det=8,
+        max_det=12,
         classes=target_ids,
         device="cpu"
     )
@@ -382,6 +478,10 @@ def detect_hazard_from_frame(frame):
                 class_name, severity, conf, x1, y1, x2, y2, width, height
             )
             candidates.append(candidate)
+
+    vertical_candidate = detect_vertical_obstacle(gray, height, width)
+    if vertical_candidate is not None:
+        candidates.append(vertical_candidate)
 
     candidates.sort(key=lambda item: item["score"], reverse=True)
     top_detections = candidates[:MAX_RETURNED_DETECTIONS]
