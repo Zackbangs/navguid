@@ -5,6 +5,56 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NavGuid - Navigation</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .hazard-visual-wrap {
+            position: relative;
+            width: 100%;
+            max-width: 100%;
+            border-radius: 14px;
+            overflow: hidden;
+            background: #111;
+            margin-top: 12px;
+        }
+
+        .camera-feed {
+            display: block;
+            width: 100%;
+            height: auto;
+            border-radius: 14px;
+            background: #111;
+        }
+
+        .overlay-canvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .hazard-meta-box {
+            margin-top: 12px;
+            padding: 12px;
+            border-radius: 12px;
+            background: #f7f7f7;
+        }
+
+        .hazard-meta-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .hazard-pill {
+            display: inline-block;
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            background: #e9ecef;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -106,9 +156,19 @@
                 <button type="button" onclick="clearHazard()">Clear Hazard</button>
             </div>
 
-            <div style="position: relative; width: 100%;">
+            <div class="hazard-visual-wrap" id="hazardVisualWrap">
                 <video id="cameraFeed" autoplay playsinline muted class="camera-feed"></video>
-                <canvas id="overlayCanvas" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none;"></canvas>
+                <canvas id="overlayCanvas" class="overlay-canvas"></canvas>
+            </div>
+
+            <div class="hazard-meta-box">
+                <strong>Live hazard details</strong>
+                <div class="hazard-meta-row">
+                    <span class="hazard-pill" id="hazardTypePill">Type: none</span>
+                    <span class="hazard-pill" id="hazardDistancePill">Distance: none</span>
+                    <span class="hazard-pill" id="hazardDirectionPill">Direction: none</span>
+                    <span class="hazard-pill" id="hazardSeverityPill">Severity: none</span>
+                </div>
             </div>
 
             <canvas id="captureCanvas" style="display:none;"></canvas>
@@ -375,6 +435,29 @@
             return spokenLabels[hazardType] || hazardType.replaceAll("_", " ");
         }
 
+        function prettyLabel(text, fallback = "none") {
+            if (!text) return fallback;
+            return text.replaceAll("_", " ");
+        }
+
+        function updateHazardMeta(data) {
+            document.getElementById("hazardTypePill").textContent =
+                `Type: ${formatHazardLabel(data.hazard_type) || "none"}`;
+            document.getElementById("hazardDistancePill").textContent =
+                `Distance: ${prettyLabel(data.distance_label)}`;
+            document.getElementById("hazardDirectionPill").textContent =
+                `Direction: ${prettyLabel(data.direction_label)}`;
+            document.getElementById("hazardSeverityPill").textContent =
+                `Severity: ${prettyLabel(data.severity)}`;
+        }
+
+        function resetHazardMeta() {
+            document.getElementById("hazardTypePill").textContent = "Type: none";
+            document.getElementById("hazardDistancePill").textContent = "Distance: none";
+            document.getElementById("hazardDirectionPill").textContent = "Direction: none";
+            document.getElementById("hazardSeverityPill").textContent = "Severity: none";
+        }
+
         function buildHazardSpeech(data) {
             if (data.message) {
                 return data.message;
@@ -422,6 +505,15 @@
             return "#ffd60a";
         }
 
+        function syncOverlaySize() {
+            const video = document.getElementById("cameraFeed");
+            const overlay = getOverlayCanvas();
+
+            const rect = video.getBoundingClientRect();
+            overlay.width = rect.width;
+            overlay.height = rect.height;
+        }
+
         function drawDetections(detections) {
             const video = document.getElementById("cameraFeed");
             const overlay = getOverlayCanvas();
@@ -429,17 +521,22 @@
 
             if (!video.videoWidth || !video.videoHeight) return;
 
-            overlay.width = video.videoWidth;
-            overlay.height = video.videoHeight;
-
+            syncOverlaySize();
             ctx.clearRect(0, 0, overlay.width, overlay.height);
             ctx.lineWidth = 3;
-            ctx.font = "18px Arial";
+            ctx.font = "bold 15px Arial";
+
+            const scaleX = overlay.width / video.videoWidth;
+            const scaleY = overlay.height / video.videoHeight;
 
             detections.forEach((item) => {
                 if (!item.bbox) return;
 
-                const { x1, y1, x2, y2 } = item.bbox;
+                const x1 = item.bbox.x1 * scaleX;
+                const y1 = item.bbox.y1 * scaleY;
+                const x2 = item.bbox.x2 * scaleX;
+                const y2 = item.bbox.y2 * scaleY;
+
                 const width = x2 - x1;
                 const height = y2 - y1;
                 const color = getBoxColor(item.severity);
@@ -450,17 +547,17 @@
 
                 const labelParts = [
                     formatHazardLabel(item.hazard_type),
-                    item.distance_label ? item.distance_label.replaceAll("_", " ") : "",
-                    item.direction_label || ""
+                    item.distance_label ? prettyLabel(item.distance_label) : "",
+                    item.direction_label ? prettyLabel(item.direction_label) : ""
                 ].filter(Boolean);
 
-                const label = labelParts.join(" - ");
+                const label = labelParts.join(" • ");
                 const textWidth = ctx.measureText(label).width + 12;
                 const textY = Math.max(24, y1 - 8);
 
-                ctx.fillRect(x1, textY - 20, textWidth, 24);
+                ctx.fillRect(x1, textY - 22, textWidth, 24);
                 ctx.fillStyle = "#ffffff";
-                ctx.fillText(label, x1 + 6, textY - 3);
+                ctx.fillText(label, x1 + 6, textY - 5);
             });
         }
 
@@ -496,6 +593,7 @@
             lastHazardType = "";
             lastHazardSeverity = "";
             lastHazardTime = 0;
+            resetHazardMeta();
             clearOverlay();
         }
 
@@ -537,6 +635,10 @@
                 hazardStatus.textContent = "Hazard monitoring started.";
                 speakText("Hazard monitoring started.", true);
 
+                video.onloadedmetadata = () => {
+                    syncOverlaySize();
+                };
+
                 scheduleNextHazardCheck();
 
             } catch (error) {
@@ -568,6 +670,7 @@
             lastHazardSeverity = "";
             lastHazardTime = 0;
 
+            resetHazardMeta();
             clearOverlay();
             hazardStatus.textContent = "Hazard monitoring stopped.";
             speakText("Hazard monitoring stopped.", true);
@@ -603,6 +706,7 @@
 
                 if (!data.success) {
                     hazardStatus.textContent = "Hazard detection failed.";
+                    resetHazardMeta();
                     clearOverlay();
                     return;
                 }
@@ -615,6 +719,8 @@
                     : (data.message || "No immediate hazard detected.");
 
                 if (data.hazard_detected) {
+                    updateHazardMeta(data);
+
                     const speech = buildHazardSpeech(data);
 
                     if (canSpeakHazard(data.hazard_type, data.severity, speech)) {
@@ -628,10 +734,12 @@
                     lastSpokenHazard = "";
                     lastHazardType = "";
                     lastHazardSeverity = "";
+                    resetHazardMeta();
                     clearOverlay();
                 }
             } catch (error) {
                 hazardStatus.textContent = "Error while checking hazards.";
+                resetHazardMeta();
                 clearOverlay();
             } finally {
                 detectionInProgress = false;
@@ -786,6 +894,8 @@
 
             speakText("Command not recognised. Please try again.", true);
         }
+
+        window.addEventListener("resize", syncOverlaySize);
     </script>
 </body>
 </html>

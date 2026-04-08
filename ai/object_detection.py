@@ -6,13 +6,12 @@ import torch
 from ultralytics import YOLO
 from ultralytics.nn.tasks import DetectionModel
 
-# Allowlist Ultralytics DetectionModel for torch weights loading
 torch.serialization.add_safe_globals([DetectionModel])
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "yolov8n.pt")
 MODEL_PATH = os.path.abspath(MODEL_PATH)
 
-model = YOLO(MODEL_PATH)
+model = None
 
 TARGET_CLASSES = {
     "person": ("warning", "Person"),
@@ -52,12 +51,19 @@ CLASS_MIN_CONFIDENCE = {
 TARGET_CLASS_IDS = None
 
 
+def get_model():
+    global model
+    if model is None:
+        model = YOLO(MODEL_PATH)
+    return model
+
+
 def _build_target_class_ids():
     global TARGET_CLASS_IDS
     if TARGET_CLASS_IDS is not None:
         return TARGET_CLASS_IDS
 
-    names = model.names
+    names = get_model().names
     target_ids = []
 
     for cls_id, class_name in names.items():
@@ -341,7 +347,7 @@ def detect_hazard_from_frame(frame):
 
     target_ids = _build_target_class_ids()
 
-    results = model.predict(
+    results = get_model().predict(
         source=frame,
         verbose=False,
         conf=CONFIDENCE_THRESHOLD,
@@ -361,7 +367,7 @@ def detect_hazard_from_frame(frame):
         for box in boxes:
             cls_id = int(box.cls[0].item())
             conf = float(box.conf[0].item())
-            class_name = model.names.get(cls_id, str(cls_id))
+            class_name = get_model().names.get(cls_id, str(cls_id))
 
             if class_name not in TARGET_CLASSES:
                 continue
