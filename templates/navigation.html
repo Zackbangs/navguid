@@ -54,6 +54,29 @@
             font-weight: 600;
             background: #e9ecef;
         }
+
+        .live-nav-box {
+            margin-top: 14px;
+            padding: 14px;
+            border-radius: 12px;
+            background: #f7f7f7;
+        }
+
+        .live-nav-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .live-nav-pill {
+            display: inline-block;
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            background: #e9ecef;
+        }
     </style>
 </head>
 <body>
@@ -145,6 +168,23 @@
             </div>
         </div>
 
+        <div class="live-nav-box">
+            <h3>Live Navigation Tracking</h3>
+            <p id="liveNavStatus">Live GPS tracking is not active.</p>
+
+            <div class="live-nav-row">
+                <span class="live-nav-pill" id="gpsAccuracyPill">GPS Accuracy: unknown</span>
+                <span class="live-nav-pill" id="nextTurnDistancePill">Next Turn: unknown</span>
+                <span class="live-nav-pill" id="destinationDistancePill">Destination: unknown</span>
+                <span class="live-nav-pill" id="trackingStatePill">Tracking: off</span>
+            </div>
+
+            <div class="button-group" style="margin-top: 12px;">
+                <button type="button" onclick="startLiveTracking()">Start Live Tracking</button>
+                <button type="button" onclick="stopLiveTracking(true)">Stop Live Tracking</button>
+            </div>
+        </div>
+
         <div class="hazard-box">
             <h3>Hazard Alerts</h3>
             <p id="hazardStatus">No hazard detected.</p>
@@ -179,7 +219,11 @@
 
     <script>
         let outdoorSteps = [];
+        let outdoorStepData = [];
         let currentStepIndex = 0;
+        let currentRouteDestination = null;
+        let routeGeometry = [];
+
         let cameraStream = null;
         let monitoringInterval = null;
         let monitoringActive = false;
@@ -191,8 +235,21 @@
         let navigationStarted = false;
         let voiceRecognitionActive = false;
 
+        let liveTrackingWatchId = null;
+        let liveTrackingActive = false;
+        let lastLiveInstructionKey = "";
+        let lastLiveInstructionTime = 0;
+        let lastAnnouncedStepIndex = -1;
+        let hasArrivalBeenAnnounced = false;
+
         const HAZARD_COOLDOWN_MS = 3500;
         const HAZARD_CAPTURE_INTERVAL_MS = 700;
+
+        const DESTINATION_ARRIVAL_THRESHOLD_M = 12;
+        const STEP_REACHED_THRESHOLD_M = 16;
+        const APPROACH_WARNING_DISTANCE_M = 20;
+        const NOW_TURN_DISTANCE_M = 9;
+        const LIVE_GUIDANCE_COOLDOWN_MS = 6000;
 
         async function startIndoorNavigation() {
             const building = document.getElementById("building").value;
@@ -255,7 +312,7 @@
         }
 
         function cleanStepForBlindUser(step) {
-            let cleaned = step;
+            let cleaned = step || "";
             cleaned = cleaned.replace(/slight right/gi, "slightly right");
             cleaned = cleaned.replace(/slight left/gi, "slightly left");
             cleaned = cleaned.replace(/continue/gi, "walk straight");
@@ -348,8 +405,345 @@
                 document.getElementById("currentLat").value = position.coords.latitude;
                 document.getElementById("currentLon").value = position.coords.longitude;
                 resultBox.innerHTML = "<p>Current location loaded.</p>";
+                updateLiveNavPills({
+                    accuracy: position.coords.accuracy
+                });
             } catch (error) {
                 resultBox.innerHTML = "<p>Could not get your location. Please allow location access.</p>";
+            }
+        }
+
+        function toRadians(value) {
+            return value * Math.PI / 180;
+        }
+
+        function haversineDistanceMeters(lat1, lon1, lat2, lon2) {
+            if (
+                lat1 === null || lat1 === undefined ||
+                lon1 === null || lon1 === undefined ||
+                lat2 === null || lat2 === undefined ||
+                lon2 === null || lon2 === undefined
+            ) {
+                return Infinity;
+            }
+
+            const earthRadius = 6371000;
+            const dLat = toRadians(lat2 - lat1);
+            const dLon = toRadians(lon2 - lon1);
+
+            const a =
+                Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return earthRadius * c;
+        }
+
+        function updateLiveNavPills({ accuracy = null, nextTurnDistance = null, destinationDistance = null, tracking = null } = {}) {
+            const accuracyPill = document.getElementById("gpsAccuracyPill");
+            const nextTurnPill = document.getElementById("nextTurnDistancePill");
+            const destinationPill = document.getElementById("destinationDistancePill");
+            const trackingPill = document.getElementById("trackingStatePill");
+
+            accuracyPill.textContent = `GPS Accuracy: ${accuracy !== null && accuracy !== undefined ? `${Math.round(accuracy)} m` : "unknown"}`;
+            nextTurnPill.textContent = `Next Turn: ${nextTurnDistance !== null && nextTurnDistance !== undefined && isFinite(nextTurnDistance) ? `${Math.round(nextTurnDistance)} m` : "unknown"}`;
+            destinationPill.textContent = `Destination: ${destinationDistance !== null && destinationDistance !== undefined && isFinite(destinationDistance) ? `${Math.round(destinationDistance)} m` : "unknown"}`;
+            trackingPill.textContent = `Tracking: ${tracking !== null ? tracking : (liveTrackingActive ? "on" : "off")}`;
+        }
+
+        function setLiveNavStatus(text) {
+            document.getElementById("liveNavStatus").textContent = text;
+        }
+
+        function getStepDistanceFromUser(userLat, userLon, stepIndex) {
+            const step = outdoorStepData[stepIndex];
+            if (!step || step.lat === null || step.lon === null || step.lat === undefined || step.lon === undefined) {
+                return Infinity;
+            }
+
+            return haversineDistanceMeters(userLat, userLon, step.lat, step.lon);
+        }
+
+        function findBestCurrentStepIndex(userLat, userLon) {
+            if (!outdoorStepData.length) {
+                return currentStepIndex;
+            }
+
+            let bestIndex = currentStepIndex;
+            let bestDistance = Infinity;
+
+            const searchStart = Math.max(0, currentStepIndex);
+            const searchEnd = Math.min(outdoorStepData.length - 1, currentStepIndex + 3);
+
+            for (let i = searchStart; i <= searchEnd; i++) {
+                const step = outdoorStepData[i];
+                if (!step || step.maneuver_type === "arrive") continue;
+
+                const distance = getStepDistanceFromUser(userLat, userLon, i);
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    bestIndex = i;
+                }
+            }
+
+            return bestIndex;
+        }
+
+        function buildLiveInstruction(step, distanceToStep) {
+            if (!step) {
+                return "Continue straight.";
+            }
+
+            if (step.maneuver_type === "arrive") {
+                return "You have arrived at your destination.";
+            }
+
+            const modifier = (step.modifier || "").replaceAll("_", " ").trim().toLowerCase();
+            const street = (step.street_name || "").trim();
+
+            if (distanceToStep <= NOW_TURN_DISTANCE_M) {
+                if (step.maneuver_type === "turn" && modifier) {
+                    if (street) {
+                        return `Turn ${modifier} now onto ${street}.`;
+                    }
+                    return `Turn ${modifier} now.`;
+                }
+
+                if (step.maneuver_type === "fork" && modifier) {
+                    return `Keep ${modifier} now.`;
+                }
+
+                if (step.maneuver_type === "merge" && modifier) {
+                    return `Merge ${modifier} now.`;
+                }
+
+                return cleanStepForBlindUser(step.instruction);
+            }
+
+            if (distanceToStep <= APPROACH_WARNING_DISTANCE_M) {
+                if (step.maneuver_type === "turn" && modifier) {
+                    return `In ${Math.round(distanceToStep)} meters, turn ${modifier}.`;
+                }
+
+                if (step.maneuver_type === "fork" && modifier) {
+                    return `In ${Math.round(distanceToStep)} meters, keep ${modifier}.`;
+                }
+
+                if (step.maneuver_type === "merge" && modifier) {
+                    return `In ${Math.round(distanceToStep)} meters, merge ${modifier}.`;
+                }
+
+                return `In ${Math.round(distanceToStep)} meters, ${cleanStepForBlindUser(step.instruction)}`;
+            }
+
+            return "Continue straight.";
+        }
+
+        function shouldSpeakLiveInstruction(key, force = false) {
+            const now = Date.now();
+
+            if (force) {
+                lastLiveInstructionKey = key;
+                lastLiveInstructionTime = now;
+                return true;
+            }
+
+            if (key !== lastLiveInstructionKey) {
+                lastLiveInstructionKey = key;
+                lastLiveInstructionTime = now;
+                return true;
+            }
+
+            if (now - lastLiveInstructionTime >= LIVE_GUIDANCE_COOLDOWN_MS) {
+                lastLiveInstructionTime = now;
+                return true;
+            }
+
+            return false;
+        }
+
+        function handleArrival(userLat, userLon) {
+            if (!currentRouteDestination) return false;
+
+            const destinationDistance = haversineDistanceMeters(
+                userLat,
+                userLon,
+                currentRouteDestination.lat,
+                currentRouteDestination.lon
+            );
+
+            updateLiveNavPills({
+                destinationDistance: destinationDistance,
+                tracking: liveTrackingActive ? "on" : "off"
+            });
+
+            if (destinationDistance <= DESTINATION_ARRIVAL_THRESHOLD_M) {
+                currentStepIndex = outdoorSteps.length ? outdoorSteps.length - 1 : currentStepIndex;
+                updateCurrentStepDisplay();
+                setLiveNavStatus("You are at the destination.");
+
+                if (!hasArrivalBeenAnnounced) {
+                    hasArrivalBeenAnnounced = true;
+                    speakText("You have arrived at your destination.", true);
+                }
+
+                stopLiveTracking(false);
+                return true;
+            }
+
+            return false;
+        }
+
+        function processLiveNavigation(position) {
+            const userLat = position.coords.latitude;
+            const userLon = position.coords.longitude;
+            const accuracy = position.coords.accuracy;
+
+            document.getElementById("currentLat").value = userLat;
+            document.getElementById("currentLon").value = userLon;
+
+            if (!navigationStarted || !outdoorSteps.length || !outdoorStepData.length) {
+                updateLiveNavPills({
+                    accuracy: accuracy,
+                    tracking: liveTrackingActive ? "on" : "off"
+                });
+                setLiveNavStatus("Tracking location, but no outdoor route is active.");
+                return;
+            }
+
+            if (handleArrival(userLat, userLon)) {
+                updateLiveNavPills({
+                    accuracy: accuracy,
+                    tracking: "off"
+                });
+                return;
+            }
+
+            const bestIndex = findBestCurrentStepIndex(userLat, userLon);
+            if (bestIndex > currentStepIndex) {
+                currentStepIndex = bestIndex;
+            }
+
+            const step = outdoorStepData[currentStepIndex];
+            const distanceToStep = getStepDistanceFromUser(userLat, userLon, currentStepIndex);
+            const destinationDistance = currentRouteDestination
+                ? haversineDistanceMeters(userLat, userLon, currentRouteDestination.lat, currentRouteDestination.lon)
+                : null;
+
+            updateCurrentStepDisplay();
+            updateLiveNavPills({
+                accuracy: accuracy,
+                nextTurnDistance: distanceToStep,
+                destinationDistance: destinationDistance,
+                tracking: liveTrackingActive ? "on" : "off"
+            });
+
+            const liveInstruction = buildLiveInstruction(step, distanceToStep);
+            setLiveNavStatus(`Live guidance active. ${liveInstruction}`);
+
+            const instructionKey = `${currentStepIndex}|${Math.round(distanceToStep / 5)}|${liveInstruction}`;
+
+            if (distanceToStep <= STEP_REACHED_THRESHOLD_M && currentStepIndex < outdoorStepData.length - 1) {
+                if (lastAnnouncedStepIndex !== currentStepIndex) {
+                    lastAnnouncedStepIndex = currentStepIndex;
+                    speakText(cleanStepForBlindUser(step.instruction), true);
+                }
+
+                currentStepIndex += 1;
+                updateCurrentStepDisplay();
+
+                const nextStep = outdoorStepData[currentStepIndex];
+                if (nextStep) {
+                    const nextDistance = getStepDistanceFromUser(userLat, userLon, currentStepIndex);
+                    const nextInstruction = buildLiveInstruction(nextStep, nextDistance);
+                    const nextKey = `next|${currentStepIndex}|${Math.round(nextDistance / 5)}|${nextInstruction}`;
+
+                    if (shouldSpeakLiveInstruction(nextKey, true)) {
+                        speakText(nextInstruction, true);
+                    }
+                }
+
+                return;
+            }
+
+            if (shouldSpeakLiveInstruction(instructionKey, false)) {
+                speakText(liveInstruction, false);
+            }
+        }
+
+        function startLiveTracking() {
+            if (!navigator.geolocation) {
+                setLiveNavStatus("Live GPS tracking is not supported in this browser.");
+                speakText("Live GPS tracking is not supported in this browser.", true);
+                return;
+            }
+
+            if (!navigationStarted || !outdoorSteps.length) {
+                setLiveNavStatus("Start an outdoor route first before live tracking.");
+                speakText("Please start outdoor navigation first.", true);
+                return;
+            }
+
+            if (liveTrackingWatchId !== null) {
+                return;
+            }
+
+            hasArrivalBeenAnnounced = false;
+            liveTrackingActive = true;
+
+            updateLiveNavPills({
+                tracking: "on"
+            });
+
+            setLiveNavStatus("Starting live GPS tracking...");
+
+            liveTrackingWatchId = navigator.geolocation.watchPosition(
+                function(position) {
+                    processLiveNavigation(position);
+                },
+                function(error) {
+                    liveTrackingActive = false;
+                    updateLiveNavPills({
+                        tracking: "off"
+                    });
+
+                    if (error.code === error.PERMISSION_DENIED) {
+                        setLiveNavStatus("Location permission denied.");
+                    } else if (error.code === error.POSITION_UNAVAILABLE) {
+                        setLiveNavStatus("Location information is unavailable.");
+                    } else if (error.code === error.TIMEOUT) {
+                        setLiveNavStatus("Location request timed out.");
+                    } else {
+                        setLiveNavStatus("Live tracking failed.");
+                    }
+                },
+                {
+                    enableHighAccuracy: true,
+                    maximumAge: 2000,
+                    timeout: 10000
+                }
+            );
+
+            speakText("Live navigation tracking started.", true);
+        }
+
+        function stopLiveTracking(announce = true) {
+            if (liveTrackingWatchId !== null) {
+                navigator.geolocation.clearWatch(liveTrackingWatchId);
+                liveTrackingWatchId = null;
+            }
+
+            liveTrackingActive = false;
+            updateLiveNavPills({
+                tracking: "off"
+            });
+
+            if (!hasArrivalBeenAnnounced) {
+                setLiveNavStatus("Live GPS tracking stopped.");
+                if (announce) {
+                    speakText("Live navigation tracking stopped.", true);
+                }
             }
         }
 
@@ -390,8 +784,16 @@
                 }
 
                 outdoorSteps = data.steps || [];
+                outdoorStepData = Array.isArray(data.step_data) ? data.step_data : [];
+                currentRouteDestination = data.destination || null;
+                routeGeometry = Array.isArray(data.route_geometry) ? data.route_geometry : [];
+
                 currentStepIndex = 0;
                 navigationStarted = true;
+                hasArrivalBeenAnnounced = false;
+                lastAnnouncedStepIndex = -1;
+                lastLiveInstructionKey = "";
+                lastLiveInstructionTime = 0;
 
                 let html = `
                     <h3>Outdoor Route</h3>
@@ -409,11 +811,14 @@
 
                 resultBox.innerHTML = html;
                 updateCurrentStepDisplay();
+                setLiveNavStatus("Route loaded. Live tracking will guide you automatically.");
                 speakText(`Route ready to ${data.destination_name}.`, true);
+
                 setTimeout(() => {
                     speakCurrentStep();
                 }, 1200);
 
+                startLiveTracking();
                 return true;
             } catch (error) {
                 resultBox.innerHTML = "<p>An error occurred while generating the outdoor route.</p>";
@@ -834,6 +1239,16 @@
                 }
 
                 await startOutdoorNavigation();
+                return;
+            }
+
+            if (command.includes("start live tracking")) {
+                startLiveTracking();
+                return;
+            }
+
+            if (command.includes("stop live tracking")) {
+                stopLiveTracking(true);
                 return;
             }
 
