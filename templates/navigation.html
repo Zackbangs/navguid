@@ -31,57 +31,17 @@
             height: 100%;
             pointer-events: none;
         }
-
-        .hazard-meta-box {
-            margin-top: 12px;
-            padding: 12px;
-            border-radius: 12px;
-            background: #f7f7f7;
-        }
-
-        .hazard-meta-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-top: 8px;
-        }
-
-        .hazard-pill {
-            display: inline-block;
-            padding: 6px 10px;
-            border-radius: 999px;
-            font-size: 0.9rem;
-            font-weight: 600;
-            background: #e9ecef;
-        }
-
-        .live-nav-box {
-            margin-top: 14px;
-            padding: 14px;
-            border-radius: 12px;
-            background: #f7f7f7;
-        }
-
-        .live-nav-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-top: 8px;
-        }
-
-        .live-nav-pill {
-            display: inline-block;
-            padding: 6px 10px;
-            border-radius: 999px;
-            font-size: 0.9rem;
-            font-weight: 600;
-            background: #e9ecef;
-        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>NavGuid Navigation</h1>
+        <div class="nav-hero">
+            <h1>NavGuid Navigation</h1>
+            <p>
+                Professional assistive navigation for indoor and outdoor guidance with live voice support,
+                route tracking, and real-time hazard awareness.
+            </p>
+        </div>
 
         <div class="safety-banner">
             This app provides navigation assistance only. Please continue using your cane,
@@ -89,7 +49,10 @@
         </div>
 
         <div class="voice-box">
-            <h2>Voice Assistant</h2>
+            <div class="section-title">
+                <h2>Voice Assistant</h2>
+                <span class="status-pill">Hands-free support</span>
+            </div>
             <p id="voiceStatus">Tap the button and speak your command.</p>
             <button type="button" class="talk-button" onclick="startVoiceAssistant()">
                 Talk to NavGuid
@@ -99,62 +62,91 @@
             </p>
         </div>
 
-        <h2>Indoor Navigation</h2>
+        <div class="section-card">
+            <div class="section-title">
+                <h2>Indoor Navigation</h2>
+                <span class="status-pill">Structured guidance</span>
+            </div>
+            <p class="section-subtitle">
+                Select your building, current location, and destination to generate an indoor route.
+            </p>
 
-        <label for="building">Select Building</label>
-        <select id="building">
-            <option value="torrens">Torrens</option>
-        </select>
+            <div class="grid-two">
+                <div>
+                    <label for="building">Select Building</label>
+                    <select id="building">
+                        <option value="torrens">Torrens</option>
+                    </select>
+                </div>
 
-        <label for="start">Current Location</label>
-        <select id="start">
-            <option value="entrance">Main Entrance</option>
-            <option value="reception">Reception</option>
-            <option value="hallway_a">Hallway A</option>
-            <option value="lift">Lift</option>
-            <option value="room_g12">Room G12</option>
-            <option value="toilet">Accessible Toilet</option>
-        </select>
+                <div>
+                    <label for="start">Current Location</label>
+                    <select id="start">
+                        <option value="entrance">Main Entrance</option>
+                        <option value="reception">Reception</option>
+                        <option value="hallway_a">Hallway A</option>
+                        <option value="lift">Lift</option>
+                        <option value="room_g12">Room G12</option>
+                        <option value="toilet">Accessible Toilet</option>
+                    </select>
+                </div>
+            </div>
 
-        <label for="destination">Destination</label>
-        <select id="destination">
-            <option value="entrance">Main Entrance</option>
-            <option value="reception">Reception</option>
-            <option value="hallway_a">Hallway A</option>
-            <option value="lift">Lift</option>
-            <option value="room_g12">Room G12</option>
-            <option value="toilet">Accessible Toilet</option>
-        </select>
+            <label for="destination">Destination</label>
+            <select id="destination">
+                <option value="entrance">Main Entrance</option>
+                <option value="reception">Reception</option>
+                <option value="hallway_a">Hallway A</option>
+                <option value="lift">Lift</option>
+                <option value="room_g12">Room G12</option>
+                <option value="toilet">Accessible Toilet</option>
+            </select>
 
-        <button onclick="startIndoorNavigation()">Navigate Indoor</button>
+            <button onclick="startIndoorNavigation()">Navigate Indoor</button>
 
-        <div id="result" class="result-box"></div>
+            <div id="result" class="result-box"></div>
+        </div>
 
-        <hr class="section-line">
+        <div class="section-card">
+            <div class="section-title">
+                <h2>Outdoor Navigation</h2>
+                <span class="status-pill">Live GPS guidance</span>
+            </div>
+            <p class="section-subtitle">
+                Use your current GPS location and start turn-by-turn outdoor walking navigation.
+            </p>
 
-        <h2>Outdoor Navigation</h2>
+            <div class="grid-two">
+                <div>
+                    <label for="currentLat">Current Latitude</label>
+                    <input type="text" id="currentLat" placeholder="Latitude" readonly>
+                </div>
 
-        <label for="currentLat">Current Latitude</label>
-        <input type="text" id="currentLat" placeholder="Latitude" readonly>
+                <div>
+                    <label for="currentLon">Current Longitude</label>
+                    <input type="text" id="currentLon" placeholder="Longitude" readonly>
+                </div>
+            </div>
 
-        <label for="currentLon">Current Longitude</label>
-        <input type="text" id="currentLon" placeholder="Longitude" readonly>
+            <button type="button" onclick="useMyLocation()">Use My Location</button>
 
-        <button type="button" onclick="useMyLocation()">Use My Location</button>
+            <label for="outdoorDestination">Destination</label>
+            <input
+                type="text"
+                id="outdoorDestination"
+                placeholder="Enter destination e.g. Adelaide Railway Station"
+            >
 
-        <label for="outdoorDestination">Destination</label>
-        <input
-            type="text"
-            id="outdoorDestination"
-            placeholder="Enter destination e.g. Adelaide Railway Station"
-        >
+            <button type="button" onclick="startOutdoorNavigation()">Start Outdoor Navigation</button>
 
-        <button type="button" onclick="startOutdoorNavigation()">Start Outdoor Navigation</button>
-
-        <div id="outdoorResult" class="result-box"></div>
+            <div id="outdoorResult" class="result-box"></div>
+        </div>
 
         <div class="step-box">
-            <h3>Current Spoken Step</h3>
+            <div class="section-title">
+                <h3>Current Spoken Step</h3>
+                <span class="status-pill">Voice instruction</span>
+            </div>
             <p id="stepCounter">No route loaded yet.</p>
             <div id="currentStepText" class="current-step-text">
                 Waiting for route instructions...
@@ -169,7 +161,10 @@
         </div>
 
         <div class="live-nav-box">
-            <h3>Live Navigation Tracking</h3>
+            <div class="section-title">
+                <h3>Live Navigation Tracking</h3>
+                <span class="status-pill">Auto progression</span>
+            </div>
             <p id="liveNavStatus">Live GPS tracking is not active.</p>
 
             <div class="live-nav-row">
@@ -179,14 +174,17 @@
                 <span class="live-nav-pill" id="trackingStatePill">Tracking: off</span>
             </div>
 
-            <div class="button-group" style="margin-top: 12px;">
+            <div class="button-group" style="margin-top: 14px;">
                 <button type="button" onclick="startLiveTracking()">Start Live Tracking</button>
                 <button type="button" onclick="stopLiveTracking(true)">Stop Live Tracking</button>
             </div>
         </div>
 
         <div class="hazard-box">
-            <h3>Hazard Alerts</h3>
+            <div class="section-title">
+                <h3>Hazard Alerts</h3>
+                <span class="status-pill">Camera monitoring</span>
+            </div>
             <p id="hazardStatus">No hazard detected.</p>
 
             <div class="button-group">
@@ -201,7 +199,7 @@
                 <canvas id="overlayCanvas" class="overlay-canvas"></canvas>
             </div>
 
-            <div class="hazard-meta-box">
+            <div class="list-card">
                 <strong>Live hazard details</strong>
                 <div class="hazard-meta-row">
                     <span class="hazard-pill" id="hazardTypePill">Type: none</span>
