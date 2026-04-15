@@ -77,14 +77,14 @@
         <div class="voice-box">
             <div class="section-title">
                 <h2>🎤 Voice Assistant</h2>
-                <span class="status-pill">Hands-free support</span>
+                <span class="status-pill" id="voiceModePill">Push to talk</span>
             </div>
             <p id="voiceStatus">Tap the button and speak your command.</p>
             <button type="button" class="talk-button" onclick="startVoiceAssistant()">
                 Talk to NavGuid
             </button>
             <p class="hint-text">
-                Try saying: “Take me to Rundle Mall”, “Next step”, “Repeat step”, “Start hazard monitoring”
+                Try saying: “Take me to Rundle Mall”, “What is my next step?”, “How far is the destination?”, “Stop listening”
             </p>
         </div>
 
@@ -290,7 +290,6 @@
         let lastHazardType = "";
         let lastHazardSeverity = "";
         let navigationStarted = false;
-        let voiceRecognitionActive = false;
 
         let liveTrackingWatchId = null;
         let liveTrackingActive = false;
@@ -298,6 +297,13 @@
         let lastLiveInstructionTime = 0;
         let lastAnnouncedStepIndex = -1;
         let hasArrivalBeenAnnounced = false;
+
+        let voiceRecognition = null;
+        let voiceRecognitionActive = false;
+        let continuousVoiceMode = false;
+        let restartVoiceAfterCommand = false;
+        let manualVoiceStop = false;
+        let voiceRestartTimeout = null;
 
         const HAZARD_COOLDOWN_MS = 3500;
         const HAZARD_CAPTURE_INTERVAL_MS = 700;
@@ -366,6 +372,58 @@
             if ("speechSynthesis" in window) {
                 window.speechSynthesis.cancel();
             }
+        }
+
+        function stopAllVoiceAssistantListening(announce = true) {
+            manualVoiceStop = true;
+            continuousVoiceMode = false;
+            restartVoiceAfterCommand = false;
+
+            if (voiceRestartTimeout) {
+                clearTimeout(voiceRestartTimeout);
+                voiceRestartTimeout = null;
+            }
+
+            if (voiceRecognition) {
+                try {
+                    voiceRecognition.stop();
+                } catch (error) {
+                    // Ignore stop errors
+                }
+            }
+
+            voiceRecognitionActive = false;
+            updateVoiceModeUI();
+
+            if (announce) {
+                document.getElementById("voiceStatus").textContent = "Voice assistant stopped listening.";
+                speakText("Voice assistant stopped listening.", true);
+            }
+        }
+
+        function updateVoiceModeUI() {
+            const modePill = document.getElementById("voiceModePill");
+
+            if (continuousVoiceMode) {
+                modePill.textContent = "Continuous voice mode";
+            } else {
+                modePill.textContent = "Push to talk";
+            }
+        }
+
+        function scheduleVoiceRestart(delayMs = 900) {
+            if (!continuousVoiceMode) return;
+            if (manualVoiceStop) return;
+
+            if (voiceRestartTimeout) {
+                clearTimeout(voiceRestartTimeout);
+            }
+
+            voiceRestartTimeout = setTimeout(() => {
+                if (continuousVoiceMode && !voiceRecognitionActive && !manualVoiceStop) {
+                    startVoiceAssistant(true);
+                }
+            }, delayMs);
         }
 
         function cleanStepForBlindUser(step) {
@@ -534,6 +592,22 @@
             }
 
             return haversineDistanceMeters(userLat, userLon, step.lat, step.lon);
+        }
+
+        function getCurrentDestinationDistance() {
+            const lat = parseFloat(document.getElementById("currentLat").value);
+            const lon = parseFloat(document.getElementById("currentLon").value);
+
+            if (!currentRouteDestination || Number.isNaN(lat) || Number.isNaN(lon)) {
+                return null;
+            }
+
+            return haversineDistanceMeters(
+                lat,
+                lon,
+                currentRouteDestination.lat,
+                currentRouteDestination.lon
+            );
         }
 
         function findBestCurrentStepIndex(userLat, userLon) {
@@ -1229,7 +1303,7 @@
             }
         }
 
-        function startVoiceAssistant() {
+        function startVoiceAssistant(isAutoRestart = false) {
             const voiceStatus = document.getElementById("voiceStatus");
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -1243,32 +1317,67 @@
                 return;
             }
 
-            const recognition = new SpeechRecognition();
-            recognition.lang = "en-AU";
-            recognition.interimResults = false;
-            recognition.maxAlternatives = 1;
+            if (!isAutoRestart) {
+                continuousVoiceMode = true;
+                manualVoiceStop = false;
+            }
+
+            updateVoiceModeUI();
+
+            voiceRecognition = new SpeechRecognition();
+            voiceRecognition.lang = "en-AU";
+            voiceRecognition.interimResults = false;
+            voiceRecognition.maxAlternatives = 1;
+            voiceRecognition.continuous = false;
 
             voiceRecognitionActive = true;
-            voiceStatus.textContent = "Listening... please speak now.";
-            speakText("Listening.", true);
+            restartVoiceAfterCommand = false;
 
-            recognition.start();
+            voiceStatus.textContent = continuousVoiceMode
+                ? "Continuous voice mode active. Listening for your command."
+                : "Listening... please speak now.";
 
-            recognition.onresult = function(event) {
+            if (!isAutoRestart) {
+                speakText("Voice assistant ready. You can speak your command.", true);
+            }
+
+            voiceRecognition.start();
+
+            voiceRecognition.onresult = async function(event) {
                 const command = event.results[0][0].transcript.toLowerCase().trim();
                 voiceStatus.textContent = `Heard: ${command}`;
-                handleVoiceCommand(command);
+                restartVoiceAfterCommand = continuousVoiceMode;
+                await handleVoiceCommand(command);
             };
 
-            recognition.onerror = function() {
+            voiceRecognition.onerror = function() {
                 voiceStatus.textContent = "Voice recognition failed. Please try again.";
-                speakText("Voice recognition failed. Please try again.", true);
+                voiceRecognitionActive = false;
+
+                if (continuousVoiceMode && !manualVoiceStop) {
+                    scheduleVoiceRestart(1200);
+                } else {
+                    speakText("Voice recognition failed. Please try again.", true);
+                }
             };
 
-            recognition.onend = function() {
+            voiceRecognition.onend = function() {
                 voiceRecognitionActive = false;
-                if (voiceStatus.textContent === "Listening... please speak now.") {
-                    voiceStatus.textContent = "No speech detected. Try again.";
+
+                if (manualVoiceStop) {
+                    return;
+                }
+
+                if (restartVoiceAfterCommand && continuousVoiceMode) {
+                    voiceStatus.textContent = "Listening again for the next command...";
+                    scheduleVoiceRestart(900);
+                    return;
+                }
+
+                if (continuousVoiceMode) {
+                    voiceStatus.textContent = "Continuous voice mode is ready.";
+                } else {
+                    voiceStatus.textContent = "Voice assistant ready.";
                 }
             };
         }
@@ -1295,6 +1404,31 @@
         }
 
         async function handleVoiceCommand(command) {
+            if (command.includes("stop listening") || command.includes("stop voice assistant")) {
+                stopAllVoiceAssistantListening(true);
+                return;
+            }
+
+            if (command.includes("stop voice")) {
+                stopVoice();
+                speakText("Voice playback stopped.", true);
+                return;
+            }
+
+            if (command.includes("stop navigation")) {
+                stopLiveTracking(false);
+                navigationStarted = false;
+                outdoorSteps = [];
+                outdoorStepData = [];
+                currentStepIndex = 0;
+                currentRouteDestination = null;
+                routeGeometry = [];
+                updateCurrentStepDisplay();
+                setLiveNavStatus("Navigation stopped.");
+                speakText("Navigation stopped.", true);
+                return;
+            }
+
             if (command.includes("use my location")) {
                 await useMyLocation();
                 speakText("Getting your current location.", true);
@@ -1338,18 +1472,24 @@
                 return;
             }
 
-            if (command.includes("stop voice")) {
-                stopVoice();
+            if (command.includes("what is my next step") || command.includes("what's my next step")) {
+                if (!outdoorSteps.length) {
+                    speakText("No route is loaded yet.", true);
+                    return;
+                }
+
+                speakCurrentStep();
                 return;
             }
 
-            if (command.includes("start hazard monitoring")) {
-                await startHazardMonitoring();
-                return;
-            }
+            if (command.includes("how far is the destination") || command.includes("distance to destination")) {
+                const distance = getCurrentDestinationDistance();
 
-            if (command.includes("stop hazard monitoring")) {
-                stopHazardMonitoring();
+                if (distance === null || !isFinite(distance)) {
+                    speakText("I do not have a destination distance yet.", true);
+                } else {
+                    speakText(`The destination is about ${Math.round(distance)} meters away.`, true);
+                }
                 return;
             }
 
@@ -1373,6 +1513,16 @@
                 } else {
                     speakText("No destination has been set yet.", true);
                 }
+                return;
+            }
+
+            if (command.includes("start hazard monitoring")) {
+                await startHazardMonitoring();
+                return;
+            }
+
+            if (command.includes("stop hazard monitoring")) {
+                stopHazardMonitoring();
                 return;
             }
 
