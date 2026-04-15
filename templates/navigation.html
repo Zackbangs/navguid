@@ -38,9 +38,16 @@
         <div class="nav-hero">
             <h1>NavGuid Navigation</h1>
             <p>
-                Professional assistive navigation for indoor and outdoor guidance with live voice support,
-                route tracking, and real-time hazard awareness.
+                Professional assistive navigation for real-time guidance, hazard awareness,
+                and safer independent movement across indoor and outdoor environments.
             </p>
+
+            <div class="hero-badges">
+                <span class="hero-badge">🧭 Turn-by-turn guidance</span>
+                <span class="hero-badge">🎤 Voice assistant</span>
+                <span class="hero-badge">📍 Live GPS tracking</span>
+                <span class="hero-badge">⚠️ Hazard detection</span>
+            </div>
         </div>
 
         <div class="safety-banner">
@@ -48,9 +55,28 @@
             guide support, and safe crossing judgment at all times.
         </div>
 
+        <div class="app-flow">
+            <div class="flow-card">
+                <strong>1. Speak or enter destination</strong>
+                <span>Start navigation by voice command or by entering the destination manually.</span>
+            </div>
+            <div class="flow-card">
+                <strong>2. Generate route</strong>
+                <span>NavGuid prepares indoor or outdoor guidance based on your selected path.</span>
+            </div>
+            <div class="flow-card">
+                <strong>3. Follow live instructions</strong>
+                <span>Live GPS tracking updates each step automatically as you move.</span>
+            </div>
+            <div class="flow-card">
+                <strong>4. Stay aware of hazards</strong>
+                <span>Camera-based hazard monitoring gives extra safety support in real time.</span>
+            </div>
+        </div>
+
         <div class="voice-box">
             <div class="section-title">
-                <h2>Voice Assistant</h2>
+                <h2>🎤 Voice Assistant</h2>
                 <span class="status-pill">Hands-free support</span>
             </div>
             <p id="voiceStatus">Tap the button and speak your command.</p>
@@ -64,8 +90,8 @@
 
         <div class="section-card">
             <div class="section-title">
-                <h2>Indoor Navigation</h2>
-                <span class="status-pill">Structured guidance</span>
+                <h2>🏢 Indoor Navigation</h2>
+                <span class="status-pill">Structured route guidance</span>
             </div>
             <p class="section-subtitle">
                 Select your building, current location, and destination to generate an indoor route.
@@ -109,8 +135,8 @@
 
         <div class="section-card">
             <div class="section-title">
-                <h2>Outdoor Navigation</h2>
-                <span class="status-pill">Live GPS guidance</span>
+                <h2>🧭 Outdoor Navigation</h2>
+                <span class="status-pill">Live GPS route guidance</span>
             </div>
             <p class="section-subtitle">
                 Use your current GPS location and start turn-by-turn outdoor walking navigation.
@@ -144,12 +170,26 @@
 
         <div class="step-box">
             <div class="section-title">
-                <h3>Current Spoken Step</h3>
-                <span class="status-pill">Voice instruction</span>
+                <h3>🚶 Current Navigation Guidance</h3>
+                <span class="status-pill">Main live instruction</span>
             </div>
-            <p id="stepCounter">No route loaded yet.</p>
-            <div id="currentStepText" class="current-step-text">
-                Waiting for route instructions...
+
+            <div class="current-step-panel">
+                <div class="current-step-card">
+                    <div class="step-kicker">Live route instruction</div>
+                    <div id="stepCounter" class="step-counter">No route loaded yet.</div>
+                    <div id="currentStepText" class="current-step-text">
+                        Waiting for route instructions...
+                    </div>
+                </div>
+
+                <div class="step-side-card">
+                    <h4>Guidance controls</h4>
+                    <p>
+                        Use these controls to repeat the spoken instruction, review the previous step,
+                        or move ahead manually if needed.
+                    </p>
+                </div>
             </div>
 
             <div class="button-group">
@@ -162,10 +202,29 @@
 
         <div class="live-nav-box">
             <div class="section-title">
-                <h3>Live Navigation Tracking</h3>
-                <span class="status-pill">Auto progression</span>
+                <h3>📍 Live Navigation Dashboard</h3>
+                <span class="status-pill">Auto step progression</span>
             </div>
             <p id="liveNavStatus">Live GPS tracking is not active.</p>
+
+            <div class="nav-stats-grid">
+                <div class="nav-stat-card">
+                    <div class="nav-stat-label">GPS Accuracy</div>
+                    <div class="nav-stat-value" id="gpsAccuracyValue">Unknown</div>
+                </div>
+                <div class="nav-stat-card">
+                    <div class="nav-stat-label">Next Turn</div>
+                    <div class="nav-stat-value" id="nextTurnDistanceValue">Unknown</div>
+                </div>
+                <div class="nav-stat-card">
+                    <div class="nav-stat-label">Destination</div>
+                    <div class="nav-stat-value" id="destinationDistanceValue">Unknown</div>
+                </div>
+                <div class="nav-stat-card">
+                    <div class="nav-stat-label">Tracking State</div>
+                    <div class="nav-stat-value" id="trackingStateValue">Off</div>
+                </div>
+            </div>
 
             <div class="live-nav-row">
                 <span class="live-nav-pill" id="gpsAccuracyPill">GPS Accuracy: unknown</span>
@@ -182,8 +241,8 @@
 
         <div class="hazard-box">
             <div class="section-title">
-                <h3>Hazard Alerts</h3>
-                <span class="status-pill">Camera monitoring</span>
+                <h3>⚠️ Hazard Alerts</h3>
+                <span class="status-pill">Camera-based safety support</span>
             </div>
             <p id="hazardStatus">No hazard detected.</p>
 
@@ -444,10 +503,24 @@
             const destinationPill = document.getElementById("destinationDistancePill");
             const trackingPill = document.getElementById("trackingStatePill");
 
-            accuracyPill.textContent = `GPS Accuracy: ${accuracy !== null && accuracy !== undefined ? `${Math.round(accuracy)} m` : "unknown"}`;
-            nextTurnPill.textContent = `Next Turn: ${nextTurnDistance !== null && nextTurnDistance !== undefined && isFinite(nextTurnDistance) ? `${Math.round(nextTurnDistance)} m` : "unknown"}`;
-            destinationPill.textContent = `Destination: ${destinationDistance !== null && destinationDistance !== undefined && isFinite(destinationDistance) ? `${Math.round(destinationDistance)} m` : "unknown"}`;
-            trackingPill.textContent = `Tracking: ${tracking !== null ? tracking : (liveTrackingActive ? "on" : "off")}`;
+            const accuracyText = accuracy !== null && accuracy !== undefined ? `${Math.round(accuracy)} m` : "Unknown";
+            const nextTurnText = nextTurnDistance !== null && nextTurnDistance !== undefined && isFinite(nextTurnDistance)
+                ? `${Math.round(nextTurnDistance)} m`
+                : "Unknown";
+            const destinationText = destinationDistance !== null && destinationDistance !== undefined && isFinite(destinationDistance)
+                ? `${Math.round(destinationDistance)} m`
+                : "Unknown";
+            const trackingText = tracking !== null ? tracking : (liveTrackingActive ? "On" : "Off");
+
+            accuracyPill.textContent = `GPS Accuracy: ${accuracyText}`;
+            nextTurnPill.textContent = `Next Turn: ${nextTurnText}`;
+            destinationPill.textContent = `Destination: ${destinationText}`;
+            trackingPill.textContent = `Tracking: ${trackingText}`;
+
+            document.getElementById("gpsAccuracyValue").textContent = accuracyText;
+            document.getElementById("nextTurnDistanceValue").textContent = nextTurnText;
+            document.getElementById("destinationDistanceValue").textContent = destinationText;
+            document.getElementById("trackingStateValue").textContent = trackingText;
         }
 
         function setLiveNavStatus(text) {
@@ -573,7 +646,7 @@
 
             updateLiveNavPills({
                 destinationDistance: destinationDistance,
-                tracking: liveTrackingActive ? "on" : "off"
+                tracking: liveTrackingActive ? "On" : "Off"
             });
 
             if (destinationDistance <= DESTINATION_ARRIVAL_THRESHOLD_M) {
@@ -604,7 +677,7 @@
             if (!navigationStarted || !outdoorSteps.length || !outdoorStepData.length) {
                 updateLiveNavPills({
                     accuracy: accuracy,
-                    tracking: liveTrackingActive ? "on" : "off"
+                    tracking: liveTrackingActive ? "On" : "Off"
                 });
                 setLiveNavStatus("Tracking location, but no outdoor route is active.");
                 return;
@@ -613,7 +686,7 @@
             if (handleArrival(userLat, userLon)) {
                 updateLiveNavPills({
                     accuracy: accuracy,
-                    tracking: "off"
+                    tracking: "Off"
                 });
                 return;
             }
@@ -634,7 +707,7 @@
                 accuracy: accuracy,
                 nextTurnDistance: distanceToStep,
                 destinationDistance: destinationDistance,
-                tracking: liveTrackingActive ? "on" : "off"
+                tracking: liveTrackingActive ? "On" : "Off"
             });
 
             const liveInstruction = buildLiveInstruction(step, distanceToStep);
@@ -691,7 +764,7 @@
             liveTrackingActive = true;
 
             updateLiveNavPills({
-                tracking: "on"
+                tracking: "On"
             });
 
             setLiveNavStatus("Starting live GPS tracking...");
@@ -703,7 +776,7 @@
                 function(error) {
                     liveTrackingActive = false;
                     updateLiveNavPills({
-                        tracking: "off"
+                        tracking: "Off"
                     });
 
                     if (error.code === error.PERMISSION_DENIED) {
@@ -734,7 +807,7 @@
 
             liveTrackingActive = false;
             updateLiveNavPills({
-                tracking: "off"
+                tracking: "Off"
             });
 
             if (!hasArrivalBeenAnnounced) {
