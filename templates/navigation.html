@@ -264,26 +264,22 @@
                 <button type="button" onclick="startLiveTracking()">Start Live Tracking</button>
                 <button type="button" onclick="stopLiveTracking(true)">Stop Live Tracking</button>
             </div>
-
-            <div class="live-nav-row compact-inline-status">
-                <span class="live-nav-pill" id="gpsAccuracyPill">GPS Accuracy: unknown</span>
-                <span class="live-nav-pill" id="nextTurnDistancePill">Next Turn: unknown</span>
-                <span class="live-nav-pill" id="destinationDistancePill">Destination: unknown</span>
-                <span class="live-nav-pill" id="trackingStatePill">Tracking: off</span>
-            </div>
         </div>
 
-        <div class="hazard-box compact-card">
+        <div class="hazard-box clean-hazard-box compact-card">
             <div class="section-title">
                 <h3>⚠️ Hazard Alerts</h3>
                 <span class="status-pill">Camera-based safety support</span>
             </div>
-            <p id="hazardStatus">No hazard detected.</p>
 
-            <div class="button-group">
+            <div id="hazardBanner" class="hazard-banner hazard-banner-neutral">
+                <div class="hazard-banner-title">Camera status</div>
+                <div id="hazardStatus">No hazard detected.</div>
+            </div>
+
+            <div class="button-group hazard-action-group">
                 <button type="button" onclick="startHazardMonitoring()">Start Hazard Monitoring</button>
                 <button type="button" onclick="stopHazardMonitoring()">Stop Hazard Monitoring</button>
-                <button type="button" onclick="simulateHazard('crossing')">Simulate Crossing Ahead</button>
                 <button type="button" onclick="clearHazard()">Clear Hazard</button>
             </div>
 
@@ -292,19 +288,12 @@
                 <canvas id="overlayCanvas" class="overlay-canvas"></canvas>
             </div>
 
-            <div class="section-title collapsible-header" style="margin-top: 18px;" onclick="toggleSection('hazardDetailsContent', 'hazardDetailsArrow')">
-                <h4>Live hazard details</h4>
-                <span class="collapse-arrow" id="hazardDetailsArrow">▶</span>
-            </div>
-
-            <div class="collapsible-content collapsed" id="hazardDetailsContent">
-                <div class="list-card compact-list-card">
-                    <div class="hazard-meta-row">
-                        <span class="hazard-pill" id="hazardTypePill">Type: none</span>
-                        <span class="hazard-pill" id="hazardDistancePill">Distance: none</span>
-                        <span class="hazard-pill" id="hazardDirectionPill">Direction: none</span>
-                        <span class="hazard-pill" id="hazardSeverityPill">Severity: none</span>
-                    </div>
+            <div id="hazardMetaPanel" class="hazard-meta-panel hidden">
+                <div class="hazard-meta-row">
+                    <span class="hazard-pill" id="hazardTypePill">Type: none</span>
+                    <span class="hazard-pill" id="hazardDistancePill">Distance: none</span>
+                    <span class="hazard-pill" id="hazardDirectionPill">Direction: none</span>
+                    <span class="hazard-pill" id="hazardSeverityPill">Severity: none</span>
                 </div>
             </div>
 
@@ -366,6 +355,39 @@
             } else {
                 content.classList.add("collapsed");
                 arrow.textContent = "▶";
+            }
+        }
+
+        function setHazardBannerState(type, message) {
+            const banner = document.getElementById("hazardBanner");
+            const status = document.getElementById("hazardStatus");
+
+            banner.classList.remove(
+                "hazard-banner-neutral",
+                "hazard-banner-safe",
+                "hazard-banner-warning",
+                "hazard-banner-urgent"
+            );
+
+            if (type === "urgent") {
+                banner.classList.add("hazard-banner-urgent");
+            } else if (type === "warning") {
+                banner.classList.add("hazard-banner-warning");
+            } else if (type === "safe") {
+                banner.classList.add("hazard-banner-safe");
+            } else {
+                banner.classList.add("hazard-banner-neutral");
+            }
+
+            status.textContent = message;
+        }
+
+        function showHazardMetaPanel(show = true) {
+            const panel = document.getElementById("hazardMetaPanel");
+            if (show) {
+                panel.classList.remove("hidden");
+            } else {
+                panel.classList.add("hidden");
             }
         }
 
@@ -624,10 +646,10 @@
                 : "Unknown";
             const trackingText = tracking !== null ? tracking : (liveTrackingActive ? "On" : "Off");
 
-            accuracyPill.textContent = `GPS Accuracy: ${accuracyText}`;
-            nextTurnPill.textContent = `Next Turn: ${nextTurnText}`;
-            destinationPill.textContent = `Destination: ${destinationText}`;
-            trackingPill.textContent = `Tracking: ${trackingText}`;
+            if (accuracyPill) accuracyPill.textContent = `GPS Accuracy: ${accuracyText}`;
+            if (nextTurnPill) nextTurnPill.textContent = `Next Turn: ${nextTurnText}`;
+            if (destinationPill) destinationPill.textContent = `Destination: ${destinationText}`;
+            if (trackingPill) trackingPill.textContent = `Tracking: ${trackingText}`;
 
             document.getElementById("gpsAccuracyValue").textContent = accuracyText;
             document.getElementById("nextTurnDistanceValue").textContent = nextTurnText;
@@ -1168,40 +1190,15 @@
             });
         }
 
-        function simulateHazard(type) {
-            const hazardStatus = document.getElementById("hazardStatus");
-            let message = "";
-            let hazardType = type;
-            let severity = "warning";
-
-            if (type === "crossing") {
-                message = "Crossing ahead. Please slow down and use caution.";
-                severity = "warning";
-            } else if (type === "obstacle") {
-                message = "Obstacle very close ahead. Stop and check your path.";
-                severity = "urgent";
-            } else {
-                message = "Possible hazard detected. Please stop and check your path.";
-                severity = "warning";
-            }
-
-            const severityText = severity ? severity.toUpperCase() : "";
-            hazardStatus.textContent = severityText ? `${severityText}: ${message}` : message;
-
-            if (canSpeakHazard(hazardType, severity, message)) {
-                speakText(message, true);
-            }
-        }
-
         function clearHazard() {
-            const hazardStatus = document.getElementById("hazardStatus");
-            hazardStatus.textContent = "No hazard detected.";
             lastSpokenHazard = "";
             lastHazardType = "";
             lastHazardSeverity = "";
             lastHazardTime = 0;
             resetHazardMeta();
             clearOverlay();
+            showHazardMetaPanel(false);
+            setHazardBannerState("safe", "No hazard detected.");
         }
 
         function scheduleNextHazardCheck() {
@@ -1214,12 +1211,11 @@
         }
 
         async function startHazardMonitoring() {
-            const hazardStatus = document.getElementById("hazardStatus");
             const video = document.getElementById("cameraFeed");
 
             try {
                 if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                    hazardStatus.textContent = "Camera access is not supported on this device.";
+                    setHazardBannerState("warning", "Camera access is not supported on this device.");
                     return;
                 }
 
@@ -1243,7 +1239,8 @@
                     monitoringInterval = null;
                 }
 
-                hazardStatus.textContent = "Hazard monitoring started.";
+                showHazardMetaPanel(false);
+                setHazardBannerState("neutral", "Hazard monitoring started.");
                 speakText("Hazard monitoring started.", true);
 
                 video.onloadedmetadata = () => {
@@ -1253,12 +1250,11 @@
                 scheduleNextHazardCheck();
 
             } catch (error) {
-                hazardStatus.textContent = "Could not access the camera. Please allow camera permission.";
+                setHazardBannerState("warning", "Could not access the camera. Please allow camera permission.");
             }
         }
 
         function stopHazardMonitoring() {
-            const hazardStatus = document.getElementById("hazardStatus");
             const video = document.getElementById("cameraFeed");
 
             monitoringActive = false;
@@ -1283,14 +1279,14 @@
 
             resetHazardMeta();
             clearOverlay();
-            hazardStatus.textContent = "Hazard monitoring stopped.";
+            showHazardMetaPanel(false);
+            setHazardBannerState("neutral", "Hazard monitoring stopped.");
             speakText("Hazard monitoring stopped.", true);
         }
 
         async function captureAndDetectHazard() {
             const video = document.getElementById("cameraFeed");
             const canvas = document.getElementById("captureCanvas");
-            const hazardStatus = document.getElementById("hazardStatus");
 
             if (!monitoringActive) return;
             if (detectionInProgress) return;
@@ -1316,21 +1312,24 @@
                 const data = await response.json();
 
                 if (!data.success) {
-                    hazardStatus.textContent = "Hazard detection failed.";
+                    setHazardBannerState("warning", "Hazard detection failed.");
                     resetHazardMeta();
+                    showHazardMetaPanel(false);
                     clearOverlay();
                     return;
                 }
 
                 drawDetections(data.detections || []);
 
-                const severityText = data.severity ? data.severity.toUpperCase() : "";
-                hazardStatus.textContent = severityText
-                    ? `${severityText}: ${data.message}`
-                    : (data.message || "No immediate hazard detected.");
-
                 if (data.hazard_detected) {
                     updateHazardMeta(data);
+                    showHazardMetaPanel(true);
+
+                    if (data.severity === "urgent") {
+                        setHazardBannerState("urgent", data.message || "Urgent hazard detected.");
+                    } else {
+                        setHazardBannerState("warning", data.message || "Hazard detected ahead.");
+                    }
 
                     const speech = buildHazardSpeech(data);
 
@@ -1346,11 +1345,14 @@
                     lastHazardType = "";
                     lastHazardSeverity = "";
                     resetHazardMeta();
+                    showHazardMetaPanel(false);
                     clearOverlay();
+                    setHazardBannerState("safe", data.message || "No immediate hazard detected.");
                 }
             } catch (error) {
-                hazardStatus.textContent = "Error while checking hazards.";
+                setHazardBannerState("warning", "Error while checking hazards.");
                 resetHazardMeta();
+                showHazardMetaPanel(false);
                 clearOverlay();
             } finally {
                 detectionInProgress = false;
