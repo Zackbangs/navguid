@@ -79,6 +79,11 @@ h3 {
     margin-bottom: 12px;
 }
 
+h4 {
+    font-size: 1.02rem;
+    margin-bottom: 8px;
+}
+
 p {
     color: var(--text-secondary);
     line-height: 1.65;
@@ -157,7 +162,7 @@ button:active,
     color: #ffffff;
     padding: 30px;
     border-radius: var(--radius-xl);
-    margin-bottom: 28px;
+    margin-bottom: 24px;
     box-shadow: 0 20px 42px rgba(30, 58, 138, 0.24);
 }
 
@@ -197,7 +202,7 @@ button:active,
     color: #9a3412;
     padding: 16px 18px;
     border-radius: var(--radius-md);
-    margin-bottom: 26px;
+    margin-bottom: 22px;
     font-weight: 700;
     line-height: 1.55;
 }
@@ -206,7 +211,7 @@ button:active,
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 12px;
-    margin-bottom: 26px;
+    margin-top: 8px;
 }
 
 .flow-card {
@@ -236,12 +241,17 @@ button:active,
 .hazard-box,
 .voice-box,
 .live-nav-box {
-    margin-top: 26px;
+    margin-top: 18px;
     padding: 24px;
     background: var(--bg-soft);
     border-radius: var(--radius-lg);
     border: 1px solid var(--border-soft);
     box-shadow: var(--shadow-card);
+}
+
+.compact-card {
+    margin-top: 16px;
+    padding: 20px;
 }
 
 .section-card {
@@ -255,6 +265,11 @@ button:active,
 
 .result-box {
     background: linear-gradient(180deg, #f8fbff 0%, #f2f7fd 100%);
+}
+
+.compact-result {
+    margin-top: 16px;
+    padding: 16px;
 }
 
 .step-box {
@@ -275,18 +290,19 @@ button:active,
     justify-content: space-between;
     gap: 12px;
     flex-wrap: wrap;
-    margin-bottom: 14px;
+    margin-bottom: 12px;
 }
 
 .section-title h2,
-.section-title h3 {
+.section-title h3,
+.section-title h4 {
     margin-bottom: 0;
 }
 
 .section-subtitle {
     font-size: 0.97rem;
     color: var(--text-secondary);
-    margin-bottom: 18px;
+    margin-bottom: 16px;
 }
 
 .status-pill,
@@ -328,6 +344,19 @@ button:active,
     margin-top: 12px;
     font-size: 14px;
     color: var(--text-secondary);
+}
+
+.voice-command-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 8px;
+}
+
+.voice-command-grid button {
+    min-height: 48px;
+    font-size: 0.98rem;
+    padding: 12px 14px;
 }
 
 .current-step-panel {
@@ -437,12 +466,20 @@ button:active,
     margin-top: 12px;
 }
 
+.compact-inline-status {
+    margin-top: 14px;
+}
+
 .list-card {
     background: #ffffff;
     border: 1px solid var(--border-soft);
     border-radius: var(--radius-md);
     padding: 18px;
-    margin-top: 16px;
+    margin-top: 12px;
+}
+
+.compact-list-card {
+    padding: 16px;
 }
 
 .camera-feed {
@@ -484,6 +521,27 @@ ol li {
     border-top: 1px solid var(--border-soft);
 }
 
+.collapsible-header {
+    cursor: pointer;
+    user-select: none;
+}
+
+.collapse-arrow {
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--primary-hover);
+    margin-left: auto;
+}
+
+.collapsible-content {
+    overflow: hidden;
+    transition: all 0.25s ease;
+}
+
+.collapsible-content.collapsed {
+    display: none;
+}
+
 @media (max-width: 1024px) {
     .app-flow {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -504,7 +562,8 @@ ol li {
     }
 
     .grid-two,
-    .button-group {
+    .button-group,
+    .voice-command-grid {
         grid-template-columns: 1fr;
     }
 
@@ -518,6 +577,10 @@ ol li {
     .hazard-box,
     .voice-box,
     .live-nav-box {
+        padding: 18px;
+    }
+
+    .compact-card {
         padding: 18px;
     }
 }

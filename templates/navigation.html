@@ -55,25 +55,6 @@
             guide support, and safe crossing judgment at all times.
         </div>
 
-        <div class="app-flow">
-            <div class="flow-card">
-                <strong>1. Speak or enter destination</strong>
-                <span>Start navigation by voice command or by entering the destination manually.</span>
-            </div>
-            <div class="flow-card">
-                <strong>2. Generate route</strong>
-                <span>NavGuid prepares indoor or outdoor guidance based on your selected path.</span>
-            </div>
-            <div class="flow-card">
-                <strong>3. Follow live instructions</strong>
-                <span>Live GPS tracking updates each step automatically as you move.</span>
-            </div>
-            <div class="flow-card">
-                <strong>4. Stay aware of hazards</strong>
-                <span>Camera-based hazard monitoring gives extra safety support in real time.</span>
-            </div>
-        </div>
-
         <div class="voice-box">
             <div class="section-title">
                 <h2>🎤 Voice Assistant</h2>
@@ -88,49 +69,102 @@
             </p>
         </div>
 
-        <div class="section-card">
+        <div class="section-card compact-card">
             <div class="section-title">
-                <h2>🏢 Indoor Navigation</h2>
-                <span class="status-pill">Structured route guidance</span>
+                <h2>🗣️ Voice Commands</h2>
+                <span class="status-pill">Quick help</span>
             </div>
             <p class="section-subtitle">
-                Select your building, current location, and destination to generate an indoor route.
+                Tap a command to test it instantly, or say it out loud in continuous voice mode.
             </p>
 
-            <div class="grid-two">
-                <div>
-                    <label for="building">Select Building</label>
-                    <select id="building">
-                        <option value="torrens">Torrens</option>
-                    </select>
-                </div>
+            <div class="voice-command-grid">
+                <button type="button" onclick="handleVoiceCommand('take me to rundle mall')">Take me to destination</button>
+                <button type="button" onclick="handleVoiceCommand('what is my next step')">What is my next step</button>
+                <button type="button" onclick="handleVoiceCommand('repeat step')">Repeat step</button>
+                <button type="button" onclick="handleVoiceCommand('how far is the destination')">How far is the destination</button>
+                <button type="button" onclick="handleVoiceCommand('start live tracking')">Start live tracking</button>
+                <button type="button" onclick="handleVoiceCommand('stop live tracking')">Stop live tracking</button>
+                <button type="button" onclick="handleVoiceCommand('start hazard monitoring')">Start hazard monitoring</button>
+                <button type="button" onclick="handleVoiceCommand('stop listening')">Stop listening</button>
+            </div>
+        </div>
 
-                <div>
-                    <label for="start">Current Location</label>
-                    <select id="start">
-                        <option value="entrance">Main Entrance</option>
-                        <option value="reception">Reception</option>
-                        <option value="hallway_a">Hallway A</option>
-                        <option value="lift">Lift</option>
-                        <option value="room_g12">Room G12</option>
-                        <option value="toilet">Accessible Toilet</option>
-                    </select>
-                </div>
+        <div class="section-card compact-card">
+            <div class="section-title collapsible-header" onclick="toggleSection('appFlowContent', 'appFlowArrow')">
+                <h2>📘 How NavGuid Works</h2>
+                <span class="collapse-arrow" id="appFlowArrow">▶</span>
             </div>
 
-            <label for="destination">Destination</label>
-            <select id="destination">
-                <option value="entrance">Main Entrance</option>
-                <option value="reception">Reception</option>
-                <option value="hallway_a">Hallway A</option>
-                <option value="lift">Lift</option>
-                <option value="room_g12">Room G12</option>
-                <option value="toilet">Accessible Toilet</option>
-            </select>
+            <div class="collapsible-content collapsed" id="appFlowContent">
+                <div class="app-flow">
+                    <div class="flow-card">
+                        <strong>1. Speak or enter destination</strong>
+                        <span>Start navigation by voice command or by entering the destination manually.</span>
+                    </div>
+                    <div class="flow-card">
+                        <strong>2. Generate route</strong>
+                        <span>NavGuid prepares indoor or outdoor guidance based on your selected path.</span>
+                    </div>
+                    <div class="flow-card">
+                        <strong>3. Follow live instructions</strong>
+                        <span>Live GPS tracking updates each step automatically as you move.</span>
+                    </div>
+                    <div class="flow-card">
+                        <strong>4. Stay aware of hazards</strong>
+                        <span>Camera-based hazard monitoring gives extra safety support in real time.</span>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-            <button onclick="startIndoorNavigation()">Navigate Indoor</button>
+        <div class="section-card compact-card">
+            <div class="section-title collapsible-header" onclick="toggleSection('indoorNavContent', 'indoorNavArrow')">
+                <h2>🏢 Indoor Navigation</h2>
+                <span class="status-pill">Structured route guidance</span>
+                <span class="collapse-arrow" id="indoorNavArrow">▶</span>
+            </div>
 
-            <div id="result" class="result-box"></div>
+            <div class="collapsible-content collapsed" id="indoorNavContent">
+                <p class="section-subtitle">
+                    Select your building, current location, and destination to generate an indoor route.
+                </p>
+
+                <div class="grid-two">
+                    <div>
+                        <label for="building">Select Building</label>
+                        <select id="building">
+                            <option value="torrens">Torrens</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="start">Current Location</label>
+                        <select id="start">
+                            <option value="entrance">Main Entrance</option>
+                            <option value="reception">Reception</option>
+                            <option value="hallway_a">Hallway A</option>
+                            <option value="lift">Lift</option>
+                            <option value="room_g12">Room G12</option>
+                            <option value="toilet">Accessible Toilet</option>
+                        </select>
+                    </div>
+                </div>
+
+                <label for="destination">Destination</label>
+                <select id="destination">
+                    <option value="entrance">Main Entrance</option>
+                    <option value="reception">Reception</option>
+                    <option value="hallway_a">Hallway A</option>
+                    <option value="lift">Lift</option>
+                    <option value="room_g12">Room G12</option>
+                    <option value="toilet">Accessible Toilet</option>
+                </select>
+
+                <button onclick="startIndoorNavigation()">Navigate Indoor</button>
+
+                <div id="result" class="result-box compact-result"></div>
+            </div>
         </div>
 
         <div class="section-card">
@@ -165,7 +199,7 @@
 
             <button type="button" onclick="startOutdoorNavigation()">Start Outdoor Navigation</button>
 
-            <div id="outdoorResult" class="result-box"></div>
+            <div id="outdoorResult" class="result-box compact-result"></div>
         </div>
 
         <div class="step-box">
@@ -200,7 +234,7 @@
             </div>
         </div>
 
-        <div class="live-nav-box">
+        <div class="live-nav-box compact-card">
             <div class="section-title">
                 <h3>📍 Live Navigation Dashboard</h3>
                 <span class="status-pill">Auto step progression</span>
@@ -226,20 +260,20 @@
                 </div>
             </div>
 
-            <div class="live-nav-row">
+            <div class="button-group" style="margin-top: 14px;">
+                <button type="button" onclick="startLiveTracking()">Start Live Tracking</button>
+                <button type="button" onclick="stopLiveTracking(true)">Stop Live Tracking</button>
+            </div>
+
+            <div class="live-nav-row compact-inline-status">
                 <span class="live-nav-pill" id="gpsAccuracyPill">GPS Accuracy: unknown</span>
                 <span class="live-nav-pill" id="nextTurnDistancePill">Next Turn: unknown</span>
                 <span class="live-nav-pill" id="destinationDistancePill">Destination: unknown</span>
                 <span class="live-nav-pill" id="trackingStatePill">Tracking: off</span>
             </div>
-
-            <div class="button-group" style="margin-top: 14px;">
-                <button type="button" onclick="startLiveTracking()">Start Live Tracking</button>
-                <button type="button" onclick="stopLiveTracking(true)">Stop Live Tracking</button>
-            </div>
         </div>
 
-        <div class="hazard-box">
+        <div class="hazard-box compact-card">
             <div class="section-title">
                 <h3>⚠️ Hazard Alerts</h3>
                 <span class="status-pill">Camera-based safety support</span>
@@ -258,13 +292,19 @@
                 <canvas id="overlayCanvas" class="overlay-canvas"></canvas>
             </div>
 
-            <div class="list-card">
-                <strong>Live hazard details</strong>
-                <div class="hazard-meta-row">
-                    <span class="hazard-pill" id="hazardTypePill">Type: none</span>
-                    <span class="hazard-pill" id="hazardDistancePill">Distance: none</span>
-                    <span class="hazard-pill" id="hazardDirectionPill">Direction: none</span>
-                    <span class="hazard-pill" id="hazardSeverityPill">Severity: none</span>
+            <div class="section-title collapsible-header" style="margin-top: 18px;" onclick="toggleSection('hazardDetailsContent', 'hazardDetailsArrow')">
+                <h4>Live hazard details</h4>
+                <span class="collapse-arrow" id="hazardDetailsArrow">▶</span>
+            </div>
+
+            <div class="collapsible-content collapsed" id="hazardDetailsContent">
+                <div class="list-card compact-list-card">
+                    <div class="hazard-meta-row">
+                        <span class="hazard-pill" id="hazardTypePill">Type: none</span>
+                        <span class="hazard-pill" id="hazardDistancePill">Distance: none</span>
+                        <span class="hazard-pill" id="hazardDirectionPill">Direction: none</span>
+                        <span class="hazard-pill" id="hazardSeverityPill">Severity: none</span>
+                    </div>
                 </div>
             </div>
 
@@ -313,6 +353,21 @@
         const APPROACH_WARNING_DISTANCE_M = 20;
         const NOW_TURN_DISTANCE_M = 9;
         const LIVE_GUIDANCE_COOLDOWN_MS = 6000;
+
+        function toggleSection(contentId, arrowId) {
+            const content = document.getElementById(contentId);
+            const arrow = document.getElementById(arrowId);
+
+            if (!content || !arrow) return;
+
+            if (content.classList.contains("collapsed")) {
+                content.classList.remove("collapsed");
+                arrow.textContent = "▼";
+            } else {
+                content.classList.add("collapsed");
+                arrow.textContent = "▶";
+            }
+        }
 
         async function startIndoorNavigation() {
             const building = document.getElementById("building").value;
@@ -388,7 +443,6 @@
                 try {
                     voiceRecognition.stop();
                 } catch (error) {
-                    // Ignore stop errors
                 }
             }
 
@@ -887,7 +941,7 @@
             if (!hasArrivalBeenAnnounced) {
                 setLiveNavStatus("Live GPS tracking stopped.");
                 if (announce) {
-                    speakText("Live navigation tracking stopped.", true);
+                    speakText("Live GPS tracking stopped.", true);
                 }
             }
         }
