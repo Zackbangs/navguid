@@ -10,7 +10,7 @@
             position: relative;
             width: 100%;
             max-width: 100%;
-            border-radius: 14px;
+            border-radius: 16px;
             overflow: hidden;
             background: #111;
             margin-top: 12px;
@@ -20,7 +20,7 @@
             display: block;
             width: 100%;
             height: auto;
-            border-radius: 14px;
+            border-radius: 16px;
             background: #111;
         }
 
@@ -35,145 +35,39 @@
 </head>
 <body>
     <div class="container">
-        <div class="nav-hero">
-            <h1>NavGuid Navigation</h1>
+        <div class="nav-hero compact-hero">
+            <h1>NavGuid</h1>
             <p>
-                Professional assistive navigation for real-time guidance, hazard awareness,
-                and safer independent movement across indoor and outdoor environments.
+                Voice-first assistive navigation with live route guidance and real-time hazard detection.
             </p>
-
-            <div class="hero-badges">
-                <span class="hero-badge">🧭 Turn-by-turn guidance</span>
-                <span class="hero-badge">🎤 Voice assistant</span>
-                <span class="hero-badge">📍 Live GPS tracking</span>
-                <span class="hero-badge">⚠️ Hazard detection</span>
-            </div>
         </div>
 
         <div class="safety-banner">
-            This app provides navigation assistance only. Please continue using your cane,
-            guide support, and safe crossing judgment at all times.
+            This app provides navigation assistance only. Please continue using your cane, guide support,
+            and safe crossing judgment at all times.
         </div>
 
-        <div class="voice-box">
+        <div class="voice-box primary-voice-box">
             <div class="section-title">
                 <h2>🎤 Voice Assistant</h2>
-                <span class="status-pill" id="voiceModePill">Push to talk</span>
+                <span class="status-pill" id="voiceModePill">Starting...</span>
             </div>
-            <p id="voiceStatus">Tap the button and speak your command.</p>
-            <button type="button" class="talk-button" onclick="startVoiceAssistant()">
-                Talk to NavGuid
-            </button>
-            <p class="hint-text">
-                Try saying: “Take me to Rundle Mall”, “What is my next step?”, “How far is the destination?”, “Stop listening”
+            <div class="voice-status-card">
+                <div class="voice-status-label">Voice status</div>
+                <div id="voiceStatus" class="voice-status-text">NavGuid is getting ready.</div>
+            </div>
+            <p class="hint-text compact-hint">
+                Say things like: “Take me to Rundle Mall”, “What is my next step?”, “How far is the destination?” or “Stop listening”.
             </p>
         </div>
 
         <div class="section-card compact-card">
             <div class="section-title">
-                <h2>🗣️ Voice Commands</h2>
-                <span class="status-pill">Quick help</span>
+                <h2>🧭 Destination</h2>
+                <span class="status-pill">Voice first</span>
             </div>
             <p class="section-subtitle">
-                Tap a command to test it instantly, or say it out loud in continuous voice mode.
-            </p>
-
-            <div class="voice-command-grid">
-                <button type="button" onclick="handleVoiceCommand('take me to rundle mall')">Take me to destination</button>
-                <button type="button" onclick="handleVoiceCommand('what is my next step')">What is my next step</button>
-                <button type="button" onclick="handleVoiceCommand('repeat step')">Repeat step</button>
-                <button type="button" onclick="handleVoiceCommand('how far is the destination')">How far is the destination</button>
-                <button type="button" onclick="handleVoiceCommand('start live tracking')">Start live tracking</button>
-                <button type="button" onclick="handleVoiceCommand('stop live tracking')">Stop live tracking</button>
-                <button type="button" onclick="handleVoiceCommand('start hazard monitoring')">Start hazard monitoring</button>
-                <button type="button" onclick="handleVoiceCommand('stop listening')">Stop listening</button>
-            </div>
-        </div>
-
-        <div class="section-card compact-card">
-            <div class="section-title collapsible-header" onclick="toggleSection('appFlowContent', 'appFlowArrow')">
-                <h2>📘 How NavGuid Works</h2>
-                <span class="collapse-arrow" id="appFlowArrow">▶</span>
-            </div>
-
-            <div class="collapsible-content collapsed" id="appFlowContent">
-                <div class="app-flow">
-                    <div class="flow-card">
-                        <strong>1. Speak or enter destination</strong>
-                        <span>Start navigation by voice command or by entering the destination manually.</span>
-                    </div>
-                    <div class="flow-card">
-                        <strong>2. Generate route</strong>
-                        <span>NavGuid prepares indoor or outdoor guidance based on your selected path.</span>
-                    </div>
-                    <div class="flow-card">
-                        <strong>3. Follow live instructions</strong>
-                        <span>Live GPS tracking updates each step automatically as you move.</span>
-                    </div>
-                    <div class="flow-card">
-                        <strong>4. Stay aware of hazards</strong>
-                        <span>Camera-based hazard monitoring gives extra safety support in real time.</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="section-card compact-card">
-            <div class="section-title collapsible-header" onclick="toggleSection('indoorNavContent', 'indoorNavArrow')">
-                <h2>🏢 Indoor Navigation</h2>
-                <span class="status-pill">Structured route guidance</span>
-                <span class="collapse-arrow" id="indoorNavArrow">▶</span>
-            </div>
-
-            <div class="collapsible-content collapsed" id="indoorNavContent">
-                <p class="section-subtitle">
-                    Select your building, current location, and destination to generate an indoor route.
-                </p>
-
-                <div class="grid-two">
-                    <div>
-                        <label for="building">Select Building</label>
-                        <select id="building">
-                            <option value="torrens">Torrens</option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label for="start">Current Location</label>
-                        <select id="start">
-                            <option value="entrance">Main Entrance</option>
-                            <option value="reception">Reception</option>
-                            <option value="hallway_a">Hallway A</option>
-                            <option value="lift">Lift</option>
-                            <option value="room_g12">Room G12</option>
-                            <option value="toilet">Accessible Toilet</option>
-                        </select>
-                    </div>
-                </div>
-
-                <label for="destination">Destination</label>
-                <select id="destination">
-                    <option value="entrance">Main Entrance</option>
-                    <option value="reception">Reception</option>
-                    <option value="hallway_a">Hallway A</option>
-                    <option value="lift">Lift</option>
-                    <option value="room_g12">Room G12</option>
-                    <option value="toilet">Accessible Toilet</option>
-                </select>
-
-                <button onclick="startIndoorNavigation()">Navigate Indoor</button>
-
-                <div id="result" class="result-box compact-result"></div>
-            </div>
-        </div>
-
-        <div class="section-card">
-            <div class="section-title">
-                <h2>🧭 Outdoor Navigation</h2>
-                <span class="status-pill">Live GPS route guidance</span>
-            </div>
-            <p class="section-subtitle">
-                Use your current GPS location and start turn-by-turn outdoor walking navigation.
+                NavGuid will try to get your location automatically. You can also type a destination as a fallback.
             </p>
 
             <div class="grid-two">
@@ -188,8 +82,6 @@
                 </div>
             </div>
 
-            <button type="button" onclick="useMyLocation()">Use My Location</button>
-
             <label for="outdoorDestination">Destination</label>
             <input
                 type="text"
@@ -197,51 +89,36 @@
                 placeholder="Enter destination e.g. Adelaide Railway Station"
             >
 
-            <button type="button" onclick="startOutdoorNavigation()">Start Outdoor Navigation</button>
+            <div class="button-group compact-button-group">
+                <button type="button" onclick="startOutdoorNavigation()">Start Navigation</button>
+                <button type="button" onclick="stopNavigation()">Stop Navigation</button>
+            </div>
 
             <div id="outdoorResult" class="result-box compact-result"></div>
         </div>
 
-        <div class="step-box">
+        <div class="step-box primary-step-box">
             <div class="section-title">
-                <h3>🚶 Current Navigation Guidance</h3>
-                <span class="status-pill">Main live instruction</span>
+                <h2>🚶 Current Step</h2>
+                <span class="status-pill">Live guidance</span>
             </div>
 
-            <div class="current-step-panel">
-                <div class="current-step-card">
-                    <div class="step-kicker">Live route instruction</div>
-                    <div id="stepCounter" class="step-counter">No route loaded yet.</div>
-                    <div id="currentStepText" class="current-step-text">
-                        Waiting for route instructions...
-                    </div>
+            <div class="current-step-card large-step-card">
+                <div id="stepCounter" class="step-counter">No route loaded yet.</div>
+                <div id="currentStepText" class="current-step-text">
+                    Waiting for route instructions...
                 </div>
-
-                <div class="step-side-card">
-                    <h4>Guidance controls</h4>
-                    <p>
-                        Use these controls to repeat the spoken instruction, review the previous step,
-                        or move ahead manually if needed.
-                    </p>
-                </div>
-            </div>
-
-            <div class="button-group">
-                <button type="button" onclick="previousStep()">Previous Step</button>
-                <button type="button" onclick="repeatStep()">Repeat Step</button>
-                <button type="button" onclick="nextStep()">Next Step</button>
-                <button type="button" onclick="stopVoice()">Stop Voice</button>
             </div>
         </div>
 
         <div class="live-nav-box compact-card">
             <div class="section-title">
-                <h3>📍 Live Navigation Dashboard</h3>
-                <span class="status-pill">Auto step progression</span>
+                <h3>📍 Live Navigation</h3>
+                <span class="status-pill">Real-time status</span>
             </div>
             <p id="liveNavStatus">Live GPS tracking is not active.</p>
 
-            <div class="nav-stats-grid">
+            <div class="nav-stats-grid compact-stats-grid">
                 <div class="nav-stat-card">
                     <div class="nav-stat-label">GPS Accuracy</div>
                     <div class="nav-stat-value" id="gpsAccuracyValue">Unknown</div>
@@ -255,21 +132,28 @@
                     <div class="nav-stat-value" id="destinationDistanceValue">Unknown</div>
                 </div>
                 <div class="nav-stat-card">
-                    <div class="nav-stat-label">Tracking State</div>
+                    <div class="nav-stat-label">Tracking</div>
                     <div class="nav-stat-value" id="trackingStateValue">Off</div>
                 </div>
             </div>
 
-            <div class="button-group" style="margin-top: 14px;">
-                <button type="button" onclick="startLiveTracking()">Start Live Tracking</button>
-                <button type="button" onclick="stopLiveTracking(true)">Stop Live Tracking</button>
+            <div class="assistive-actions">
+                <button type="button" class="secondary-action" onclick="repeatStep()">Repeat Current Step</button>
+                <button type="button" class="secondary-action" onclick="stopAllVoiceAssistantListening(true)">Stop Listening</button>
+            </div>
+
+            <div class="hidden-status-pills">
+                <span class="live-nav-pill" id="gpsAccuracyPill">GPS Accuracy: unknown</span>
+                <span class="live-nav-pill" id="nextTurnDistancePill">Next Turn: unknown</span>
+                <span class="live-nav-pill" id="destinationDistancePill">Destination: unknown</span>
+                <span class="live-nav-pill" id="trackingStatePill">Tracking: off</span>
             </div>
         </div>
 
         <div class="hazard-box clean-hazard-box compact-card">
             <div class="section-title">
-                <h3>⚠️ Hazard Alerts</h3>
-                <span class="status-pill">Camera-based safety support</span>
+                <h3>⚠️ Hazard Detection</h3>
+                <span class="status-pill">Camera safety</span>
             </div>
 
             <div id="hazardBanner" class="hazard-banner hazard-banner-neutral">
@@ -277,10 +161,9 @@
                 <div id="hazardStatus">No hazard detected.</div>
             </div>
 
-            <div class="button-group hazard-action-group">
+            <div class="button-group compact-button-group">
                 <button type="button" onclick="startHazardMonitoring()">Start Hazard Monitoring</button>
                 <button type="button" onclick="stopHazardMonitoring()">Stop Hazard Monitoring</button>
-                <button type="button" onclick="clearHazard()">Clear Hazard</button>
             </div>
 
             <div class="hazard-visual-wrap" id="hazardVisualWrap">
@@ -333,6 +216,7 @@
         let restartVoiceAfterCommand = false;
         let manualVoiceStop = false;
         let voiceRestartTimeout = null;
+        let initialVoiceGreetingDone = false;
 
         const HAZARD_COOLDOWN_MS = 3500;
         const HAZARD_CAPTURE_INTERVAL_MS = 700;
@@ -342,21 +226,6 @@
         const APPROACH_WARNING_DISTANCE_M = 20;
         const NOW_TURN_DISTANCE_M = 9;
         const LIVE_GUIDANCE_COOLDOWN_MS = 6000;
-
-        function toggleSection(contentId, arrowId) {
-            const content = document.getElementById(contentId);
-            const arrow = document.getElementById(arrowId);
-
-            if (!content || !arrow) return;
-
-            if (content.classList.contains("collapsed")) {
-                content.classList.remove("collapsed");
-                arrow.textContent = "▼";
-            } else {
-                content.classList.add("collapsed");
-                arrow.textContent = "▶";
-            }
-        }
 
         function setHazardBannerState(type, message) {
             const banner = document.getElementById("hazardBanner");
@@ -388,44 +257,6 @@
                 panel.classList.remove("hidden");
             } else {
                 panel.classList.add("hidden");
-            }
-        }
-
-        async function startIndoorNavigation() {
-            const building = document.getElementById("building").value;
-            const start = document.getElementById("start").value;
-            const destination = document.getElementById("destination").value;
-            const resultBox = document.getElementById("result");
-
-            resultBox.innerHTML = "Loading indoor route...";
-
-            try {
-                const response = await fetch("/navigate", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        building: building,
-                        start: start,
-                        destination: destination
-                    })
-                });
-
-                const data = await response.json();
-
-                if (!data.success) {
-                    resultBox.innerHTML = `<p>${data.message}</p>`;
-                    return;
-                }
-
-                let html = "<h3>Indoor Route Steps</h3><ol>";
-                data.steps.forEach(step => {
-                    html += `<li>${step}</li>`;
-                });
-                html += "</ol>";
-
-                resultBox.innerHTML = html;
-            } catch (error) {
-                resultBox.innerHTML = "<p>An error occurred while generating the indoor route.</p>";
             }
         }
 
@@ -481,9 +312,9 @@
             const modePill = document.getElementById("voiceModePill");
 
             if (continuousVoiceMode) {
-                modePill.textContent = "Continuous voice mode";
+                modePill.textContent = "Listening";
             } else {
-                modePill.textContent = "Push to talk";
+                modePill.textContent = "Stopped";
             }
         }
 
@@ -532,30 +363,6 @@
             speakText(step, true);
         }
 
-        function nextStep() {
-            if (!outdoorSteps.length) return;
-
-            if (currentStepIndex < outdoorSteps.length - 1) {
-                currentStepIndex += 1;
-                updateCurrentStepDisplay();
-                speakCurrentStep();
-            } else {
-                speakText("You are already at the final step.", true);
-            }
-        }
-
-        function previousStep() {
-            if (!outdoorSteps.length) return;
-
-            if (currentStepIndex > 0) {
-                currentStepIndex -= 1;
-                updateCurrentStepDisplay();
-                speakCurrentStep();
-            } else {
-                speakText("You are already at the first step.", true);
-            }
-        }
-
         function repeatStep() {
             if (!outdoorSteps.length) {
                 speakText("No route is loaded yet.", true);
@@ -587,20 +394,17 @@
             });
         }
 
-        async function useMyLocation() {
-            const resultBox = document.getElementById("outdoorResult");
-            resultBox.innerHTML = "<p>Getting your current location...</p>";
-
+        async function loadCurrentLocationSilently() {
             try {
                 const position = await getCurrentLocationPromise();
                 document.getElementById("currentLat").value = position.coords.latitude;
                 document.getElementById("currentLon").value = position.coords.longitude;
-                resultBox.innerHTML = "<p>Current location loaded.</p>";
                 updateLiveNavPills({
                     accuracy: position.coords.accuracy
                 });
+                return true;
             } catch (error) {
-                resultBox.innerHTML = "<p>Could not get your location. Please allow location access.</p>";
+                return false;
             }
         }
 
@@ -902,7 +706,7 @@
 
             if (!navigationStarted || !outdoorSteps.length) {
                 setLiveNavStatus("Start an outdoor route first before live tracking.");
-                speakText("Please start outdoor navigation first.", true);
+                speakText("Please say your destination first.", true);
                 return;
             }
 
@@ -968,19 +772,42 @@
             }
         }
 
+        function stopNavigation(announce = true) {
+            stopLiveTracking(false);
+            navigationStarted = false;
+            outdoorSteps = [];
+            outdoorStepData = [];
+            currentStepIndex = 0;
+            currentRouteDestination = null;
+            routeGeometry = [];
+            updateCurrentStepDisplay();
+            setLiveNavStatus("Navigation stopped.");
+            if (announce) {
+                speakText("Navigation stopped.", true);
+            }
+        }
+
         async function startOutdoorNavigation() {
-            const startLat = document.getElementById("currentLat").value;
-            const startLon = document.getElementById("currentLon").value;
+            let startLat = document.getElementById("currentLat").value;
+            let startLon = document.getElementById("currentLon").value;
             const destination = document.getElementById("outdoorDestination").value.trim();
             const resultBox = document.getElementById("outdoorResult");
 
             if (!startLat || !startLon) {
-                resultBox.innerHTML = "<p>Please click 'Use My Location' first.</p>";
-                return false;
+                const locationLoaded = await loadCurrentLocationSilently();
+                startLat = document.getElementById("currentLat").value;
+                startLon = document.getElementById("currentLon").value;
+
+                if (!locationLoaded || !startLat || !startLon) {
+                    resultBox.innerHTML = "<p>Could not get your location. Please allow location access.</p>";
+                    speakText("I could not get your location. Please allow location access.", true);
+                    return false;
+                }
             }
 
             if (!destination) {
-                resultBox.innerHTML = "<p>Please enter an outdoor destination.</p>";
+                resultBox.innerHTML = "<p>Please enter a destination or say one by voice.</p>";
+                speakText("Please say your destination.", true);
                 return false;
             }
 
@@ -1001,6 +828,7 @@
 
                 if (!data.success) {
                     resultBox.innerHTML = `<p>${data.message}</p>`;
+                    speakText(data.message || "I could not generate the route.", true);
                     return false;
                 }
 
@@ -1016,21 +844,12 @@
                 lastLiveInstructionKey = "";
                 lastLiveInstructionTime = 0;
 
-                let html = `
-                    <h3>Outdoor Route</h3>
+                resultBox.innerHTML = `
                     <p><strong>Destination:</strong> ${data.destination_name}</p>
                     <p><strong>Distance:</strong> ${data.distance_m} metres</p>
                     <p><strong>Estimated Time:</strong> ${data.duration_min} minutes</p>
-                    <ol>
                 `;
 
-                outdoorSteps.forEach(step => {
-                    html += `<li>${step}</li>`;
-                });
-
-                html += "</ol>";
-
-                resultBox.innerHTML = html;
                 updateCurrentStepDisplay();
                 setLiveNavStatus("Route loaded. Live tracking will guide you automatically.");
                 speakText(`Route ready to ${data.destination_name}.`, true);
@@ -1043,6 +862,7 @@
                 return true;
             } catch (error) {
                 resultBox.innerHTML = "<p>An error occurred while generating the outdoor route.</p>";
+                speakText("An error occurred while generating the route.", true);
                 return false;
             }
         }
@@ -1390,11 +1210,12 @@
             restartVoiceAfterCommand = false;
 
             voiceStatus.textContent = continuousVoiceMode
-                ? "Continuous voice mode active. Listening for your command."
-                : "Listening... please speak now.";
+                ? "NavGuid is listening for your command."
+                : "Voice assistant is ready.";
 
-            if (!isAutoRestart) {
-                speakText("Voice assistant ready. You can speak your command.", true);
+            if (!isAutoRestart && !initialVoiceGreetingDone) {
+                initialVoiceGreetingDone = true;
+                speakText("NavGuid is ready. Please say your destination.", true);
             }
 
             voiceRecognition.start();
@@ -1412,8 +1233,6 @@
 
                 if (continuousVoiceMode && !manualVoiceStop) {
                     scheduleVoiceRestart(1200);
-                } else {
-                    speakText("Voice recognition failed. Please try again.", true);
                 }
             };
 
@@ -1431,7 +1250,8 @@
                 }
 
                 if (continuousVoiceMode) {
-                    voiceStatus.textContent = "Continuous voice mode is ready.";
+                    voiceStatus.textContent = "NavGuid is listening.";
+                    scheduleVoiceRestart(1200);
                 } else {
                     voiceStatus.textContent = "Voice assistant ready.";
                 }
@@ -1442,9 +1262,13 @@
             speakText(`Setting destination to ${destination}. Getting your location now.`, true);
 
             try {
-                const position = await getCurrentLocationPromise();
-                document.getElementById("currentLat").value = position.coords.latitude;
-                document.getElementById("currentLon").value = position.coords.longitude;
+                const positionLoaded = await loadCurrentLocationSilently();
+
+                if (!positionLoaded) {
+                    speakText("I could not get your location. Please allow location access and try again.", true);
+                    return;
+                }
+
                 document.getElementById("outdoorDestination").value = destination;
 
                 speakText(`Location loaded. Starting navigation to ${destination}.`, true);
@@ -1472,22 +1296,7 @@
             }
 
             if (command.includes("stop navigation")) {
-                stopLiveTracking(false);
-                navigationStarted = false;
-                outdoorSteps = [];
-                outdoorStepData = [];
-                currentStepIndex = 0;
-                currentRouteDestination = null;
-                routeGeometry = [];
-                updateCurrentStepDisplay();
-                setLiveNavStatus("Navigation stopped.");
-                speakText("Navigation stopped.", true);
-                return;
-            }
-
-            if (command.includes("use my location")) {
-                await useMyLocation();
-                speakText("Getting your current location.", true);
+                stopNavigation(true);
                 return;
             }
 
@@ -1503,32 +1312,7 @@
                 return;
             }
 
-            if (command.includes("start live tracking")) {
-                startLiveTracking();
-                return;
-            }
-
-            if (command.includes("stop live tracking")) {
-                stopLiveTracking(true);
-                return;
-            }
-
-            if (command.includes("next step")) {
-                nextStep();
-                return;
-            }
-
-            if (command.includes("previous step")) {
-                previousStep();
-                return;
-            }
-
-            if (command.includes("repeat step")) {
-                repeatStep();
-                return;
-            }
-
-            if (command.includes("what is my next step") || command.includes("what's my next step")) {
+            if (command.includes("repeat step") || command.includes("what is my next step") || command.includes("what's my next step")) {
                 if (!outdoorSteps.length) {
                     speakText("No route is loaded yet.", true);
                     return;
@@ -1591,10 +1375,17 @@
                 }
             }
 
-            speakText("Command not recognised. Please try again.", true);
+            speakText("I did not catch that. Please say your destination or say repeat step.", true);
         }
 
         window.addEventListener("resize", syncOverlaySize);
+
+        window.addEventListener("load", async () => {
+            await loadCurrentLocationSilently();
+            setHazardBannerState("neutral", "Hazard monitoring is off.");
+            showHazardMetaPanel(false);
+            startVoiceAssistant();
+        });
     </script>
 </body>
 </html>
