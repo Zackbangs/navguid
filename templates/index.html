@@ -15,7 +15,6 @@
             --muted: #d7e3ff;
             --radius: 18px;
             --safe: #8ce99a;
-            --warning: #ffd43b;
         }
 
         * {
@@ -116,10 +115,6 @@
             line-height: 1.6;
         }
 
-        .hidden {
-            display: none;
-        }
-
         @media (max-width: 640px) {
             h1 {
                 font-size: 2rem;
@@ -138,20 +133,20 @@
 
             <div class="subtitle">
                 Voice-first indoor and outdoor navigation for blind and visually impaired users,
-                with live spoken guidance and hazard awareness support.
+                with spoken guidance and live hazard support.
             </div>
 
-            <div class="status-pill" id="homeModeStatus">Voice-first mode ready</div>
+            <div class="status-pill" id="homeModeStatus">Ready</div>
 
             <div class="voice-status" id="homeVoiceStatus" aria-live="polite">
-                NavGuid is ready. Say indoor navigation, or say take me to your destination.
+                Welcome to NavGuid. Where do you want to go?
             </div>
 
             <div class="voice-help">
                 <strong>Try saying:</strong><br>
                 “Indoor navigation”<br>
-                “Outdoor navigation”<br>
-                “Take me to Marion Shopping Centre”
+                “Take me to Marion Shopping Centre”<br>
+                “Take me to Adelaide Railway Station”
             </div>
 
             <button id="activateVoiceBtn" onclick="activateHomeVoice()">
@@ -159,12 +154,12 @@
             </button>
 
             <a class="button secondary-btn" id="continueBtn" href="{{ url_for('navigation_page') }}">
-                Continue to Navigation Screen
+                Open Navigation Screen
             </a>
 
             <div class="support-note">
-                Voice is the main interaction. The on-screen button is a fallback if browser permissions
-                need a tap before microphone access can begin.
+                Voice is the main experience. The buttons remain available only as a fallback when the phone browser
+                requires one first tap for microphone access.
             </div>
         </div>
     </div>
@@ -214,7 +209,7 @@
             const chunks = splitSpeechIntoChunks(text);
             if (!chunks.length) return;
 
-            const rate = options.rate ?? 0.92;
+            const rate = options.rate ?? 0.93;
             const pitch = options.pitch ?? 1.0;
             const pauseMs = options.pauseMs ?? 220;
 
@@ -280,7 +275,7 @@
             homeRecognitionActive = true;
             homeManualStop = false;
 
-            setHomeVoiceStatus("Listening. Say indoor navigation, outdoor navigation, or say take me to your destination.");
+            setHomeVoiceStatus("Listening. Where do you want to go?");
             setHomeModeStatus("Listening");
 
             try {
@@ -288,6 +283,7 @@
             } catch (error) {
                 homeRecognitionActive = false;
                 setHomeVoiceStatus("Microphone could not start. Tap Start Voice Assistant and try again.");
+                return;
             }
 
             homeRecognition.onresult = function(event) {
@@ -295,20 +291,10 @@
                 setHomeVoiceStatus(`Heard: ${transcript}`);
 
                 if (transcript.includes("indoor navigation")) {
-                    setHomeModeStatus("Indoor navigation selected");
-                    speakText("Indoor navigation selected. Opening navigation screen now.", true);
+                    setHomeModeStatus("Indoor navigation");
+                    speakText("Alright. Opening indoor navigation now.", true);
                     goToNavigation({
                         mode: "indoor",
-                        autostart: "1"
-                    });
-                    return;
-                }
-
-                if (transcript.includes("outdoor navigation")) {
-                    setHomeModeStatus("Outdoor navigation selected");
-                    speakText("Outdoor navigation selected. Opening navigation screen now.", true);
-                    goToNavigation({
-                        mode: "outdoor",
                         autostart: "1"
                     });
                     return;
@@ -321,14 +307,14 @@
                         .trim();
 
                     if (!destination) {
-                        setHomeVoiceStatus("I did not hear a destination clearly. Please say it again.");
-                        speakText("I did not hear your destination clearly. Please say it again.", true);
+                        setHomeVoiceStatus("I did not catch the destination. Please say it again.");
+                        speakText("I did not catch the destination. Please say it again.", true);
                         restartHomeVoiceLoop();
                         return;
                     }
 
-                    setHomeModeStatus("Outdoor destination selected");
-                    speakText(`Opening outdoor navigation to ${destination}.`, true);
+                    setHomeModeStatus("Outdoor navigation");
+                    speakText(`Alright. Taking you to ${destination}.`, true);
                     goToNavigation({
                         mode: "outdoor",
                         destination: destination,
@@ -337,7 +323,17 @@
                     return;
                 }
 
-                speakText("Please say indoor navigation, outdoor navigation, or say take me to your destination.", true);
+                if (transcript.includes("outdoor navigation")) {
+                    setHomeModeStatus("Outdoor navigation");
+                    speakText("Alright. Tell me where you want to go.", true);
+                    goToNavigation({
+                        mode: "outdoor",
+                        autostart: "1"
+                    });
+                    return;
+                }
+
+                speakText("Please say indoor navigation, or say take me to your destination.", true);
                 restartHomeVoiceLoop();
             };
 
@@ -368,10 +364,7 @@
         function activateHomeVoice() {
             if (!introSpoken) {
                 introSpoken = true;
-                speakText(
-                    "NavGuid is ready. Say indoor navigation, outdoor navigation, or say take me to your destination.",
-                    true
-                );
+                speakText("Welcome to NavGuid. Where do you want to go?", true);
             }
             startHomeVoiceRecognition();
         }
@@ -382,10 +375,7 @@
             setTimeout(() => {
                 if (!introSpoken) {
                     introSpoken = true;
-                    speakText(
-                        "NavGuid is ready. Say indoor navigation, outdoor navigation, or say take me to your destination.",
-                        true
-                    );
+                    speakText("Welcome to NavGuid. Where do you want to go?", true);
                 }
             }, 400);
         });

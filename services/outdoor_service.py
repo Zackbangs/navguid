@@ -44,13 +44,13 @@ def _build_spoken_instruction(step):
 
     if maneuver_type == "depart":
         if street_name:
-            return f"Start walking straight on {street_name}."
-        return "Start walking straight."
+            return f"Start walking on {street_name}."
+        return "Start walking now."
 
     if maneuver_type == "continue":
         if street_name:
-            return f"Walk straight on {street_name} for about {distance} metres."
-        return f"Walk straight for about {distance} metres."
+            return f"Keep going on {street_name} for about {distance} metres."
+        return f"Keep going straight for about {distance} metres."
 
     if maneuver_type == "turn":
         if modifier and street_name:
@@ -72,8 +72,8 @@ def _build_spoken_instruction(step):
     if maneuver_type == "roundabout":
         exit_number = maneuver.get("exit")
         if exit_number:
-            return f"Approach the roundabout in about {distance} metres and take exit {exit_number}."
-        return f"Approach the roundabout in about {distance} metres."
+            return f"In about {distance} metres, approach the roundabout and take exit {exit_number}."
+        return f"In about {distance} metres, approach the roundabout."
 
     if maneuver_type == "arrive":
         return "You have arrived at your destination."

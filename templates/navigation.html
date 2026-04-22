@@ -219,18 +219,18 @@
         <div class="voice-card">
             <div class="voice-title">Voice assistant</div>
             <div id="voiceStatus" class="small" aria-live="polite">
-                NavGuid is ready. Say indoor navigation, or say take me to your destination.
+                Welcome to NavGuid. Where do you want to go?
             </div>
         </div>
 
         <div class="mode-card">
             <div class="mode-title">Current mode</div>
-            <div id="modeText" class="mode-text">Waiting for voice command</div>
+            <div id="modeText" class="mode-text">Waiting for destination</div>
         </div>
 
         <div class="status-card">
             <div class="status-title">Current guidance</div>
-            <div id="navText" class="main-status">Say indoor navigation or say take me to your destination</div>
+            <div id="navText" class="main-status">Say indoor navigation or tell me where you want to go</div>
         </div>
 
         <div class="hazard-card">
@@ -248,7 +248,7 @@
         <div class="indoor-panel hidden" id="indoorPanel">
             <strong>Indoor navigation</strong><br>
             <div class="small" style="margin-top: 10px; margin-bottom: 12px;">
-                Voice is primary. This panel remains available as a fallback for route selection.
+                Voice is the main interaction. This panel stays available as a fallback.
             </div>
 
             <label for="buildingSelect">Building</label>
@@ -281,8 +281,6 @@
 
         <div class="controls">
             <button id="startBtn" onclick="startNavigation()">Start Voice Navigation</button>
-            <button class="secondary" onclick="startHazardMonitoring()">Start Hazard Monitoring</button>
-            <button class="secondary" onclick="stopHazardMonitoring()">Stop Hazard Monitoring</button>
             <button class="secondary" onclick="repeatCurrentInstruction()">Repeat Current Instruction</button>
             <button class="secondary" onclick="resetVoiceAssistant()">Reset Voice Assistant</button>
             <button class="secondary" onclick="stopAll()">Stop Everything</button>
@@ -315,12 +313,11 @@
         let lastHazardSpeechTime = 0;
         let lastGuidanceSpeechKey = "";
         let lastGuidanceSpeechTime = 0;
-        let lastKnownPosition = null;
 
         const HAZARD_COOLDOWN_MS = 3500;
         const DESTINATION_ARRIVAL_THRESHOLD_M = 14;
         const STEP_REACHED_THRESHOLD_M = 18;
-        const APPROACH_DISTANCE_M = 26;
+        const APPROACH_DISTANCE_M = 24;
         const NOW_TURN_DISTANCE_M = 10;
         const GUIDANCE_COOLDOWN_MS = 4500;
 
@@ -362,9 +359,9 @@
             const chunks = splitSpeechIntoChunks(text);
             if (!chunks.length) return;
 
-            const rate = options.rate ?? 0.92;
+            const rate = options.rate ?? 0.93;
             const pitch = options.pitch ?? 1.0;
-            const pauseMs = options.pauseMs ?? 200;
+            const pauseMs = options.pauseMs ?? 220;
 
             function speakChunk(index) {
                 if (index >= chunks.length) return;
@@ -389,7 +386,7 @@
         }
 
         function speakGuidance(text, priority = false) {
-            speakText(text, priority, { rate: 0.90, pauseMs: 240 });
+            speakText(text, priority, { rate: 0.92, pauseMs: 240 });
         }
 
         function speakHazard(text, priority = true) {
@@ -401,7 +398,7 @@
 
             lastHazardSpeech = text;
             lastHazardSpeechTime = now;
-            speakText(text, priority, { rate: 0.88, pauseMs: 180 });
+            speakText(text, priority, { rate: 0.90, pauseMs: 180 });
         }
 
         function setVoiceStatus(text) {
@@ -429,13 +426,13 @@
         }
 
         function normaliseStepText(step) {
-            if (!step) return "Walk straight.";
+            if (!step) return "Keep moving straight ahead.";
 
             return step
                 .replace(/slight right/gi, "slightly right")
                 .replace(/slight left/gi, "slightly left")
-                .replace(/continue straight/gi, "walk straight")
-                .replace(/continue/gi, "walk straight")
+                .replace(/continue straight/gi, "keep moving straight")
+                .replace(/continue/gi, "keep moving")
                 .replace(/metres/gi, "meters")
                 .replace(/\s+/g, " ")
                 .trim();
@@ -627,7 +624,7 @@
 
         async function startHazardMonitoring() {
             const cameraReady = await startBackCamera();
-            if (!cameraReady) return;
+            if (!cameraReady) return false;
 
             hazardMonitoringActive = true;
             setHazardText("Hazard monitoring active", "safe");
@@ -642,6 +639,7 @@
             }
 
             hazardInterval = setInterval(captureAndDetectHazard, 1600);
+            return true;
         }
 
         function stopHazardMonitoring() {
@@ -693,7 +691,7 @@
 
             recognitionActive = true;
             manualStop = false;
-            setVoiceStatus("Listening for indoor navigation, outdoor navigation, or your destination.");
+            setVoiceStatus("Listening. Where do you want to go?");
 
             try {
                 recognition.start();
@@ -722,11 +720,6 @@
                     return;
                 }
 
-                if (transcript.includes("outdoor navigation")) {
-                    activateOutdoorMode(true);
-                    return;
-                }
-
                 if (transcript.startsWith("take me to") || transcript.startsWith("navigate to")) {
                     currentMode = "outdoor";
                     setModeText("Outdoor navigation");
@@ -738,7 +731,7 @@
                         .trim();
 
                     if (!currentDestination) {
-                        speakGuidance("Please say your destination again.", true);
+                        speakGuidance("I did not catch the destination. Please say it again.", true);
                         restartVoiceLoop();
                         return;
                     }
@@ -747,12 +740,23 @@
                     return;
                 }
 
+                if (transcript.includes("outdoor navigation")) {
+                    currentMode = "outdoor";
+                    setModeText("Outdoor navigation");
+                    hideIndoorPanel();
+                    setNavText("Tell me where you want to go");
+                    setVoiceStatus("Outdoor navigation ready. Tell me where you want to go.");
+                    speakGuidance("Alright. Tell me where you want to go.", true);
+                    restartVoiceLoop();
+                    return;
+                }
+
                 if (transcript.includes("repeat instruction")) {
                     repeatCurrentInstruction();
                     return;
                 }
 
-                speakGuidance("Please say indoor navigation, outdoor navigation, or say take me to your destination.", true);
+                speakGuidance("Please say indoor navigation, or tell me where you want to go.", true);
                 restartVoiceLoop();
             };
 
@@ -810,9 +814,9 @@
             arrivedAnnounced = false;
             hideRouteSummary();
             hideIndoorPanel();
-            setModeText("Waiting for voice command");
-            setNavText("Say indoor navigation or say take me to your destination");
-            setVoiceStatus("Voice assistant reset. Listening again.");
+            setModeText("Waiting for destination");
+            setNavText("Say indoor navigation or tell me where you want to go");
+            setVoiceStatus("Welcome to NavGuid. Where do you want to go?");
             speechSynthesis.cancel();
             manualStop = false;
             restartVoiceLoop();
@@ -831,10 +835,9 @@
             currentStepIndex = 0;
             destinationCoords = null;
             arrivedAnnounced = false;
-            lastKnownPosition = null;
             setVoiceStatus("Stopped.");
-            setModeText("Waiting for voice command");
-            setNavText("Say indoor navigation or say take me to your destination");
+            setModeText("Waiting for destination");
+            setNavText("Say indoor navigation or tell me where you want to go");
             setHazardText("No hazard detected", "safe");
             hideRouteSummary();
             hideIndoorPanel();
@@ -900,7 +903,7 @@
         }
 
         function buildLiveInstruction(step, distanceToStep, destinationDistance = null) {
-            if (!step) return "Walk straight.";
+            if (!step) return "Keep moving straight ahead.";
 
             if (step.maneuver_type === "arrive") {
                 return "You have arrived at your destination.";
@@ -910,7 +913,7 @@
             const street = (step.street_name || "").trim();
 
             if (destinationDistance !== null && destinationDistance <= DESTINATION_ARRIVAL_THRESHOLD_M + 8) {
-                return "You are very close. You have almost arrived.";
+                return "You are very close. Keep going.";
             }
 
             if (distanceToStep <= NOW_TURN_DISTANCE_M) {
@@ -930,8 +933,8 @@
 
                 if (step.maneuver_type === "depart") {
                     return street
-                        ? `Start walking straight on ${street}.`
-                        : `Start walking straight.`;
+                        ? `Start walking on ${street}.`
+                        : `Start walking now.`;
                 }
 
                 return normaliseStepText(step.instruction);
@@ -954,8 +957,8 @@
 
                 if (step.maneuver_type === "depart") {
                     return street
-                        ? `Walk straight on ${street}.`
-                        : `Walk straight.`;
+                        ? `Keep moving on ${street}.`
+                        : "Keep moving straight ahead.";
                 }
 
                 return `In ${Math.round(distanceToStep)} meters, ${normaliseStepText(step.instruction)}`;
@@ -963,17 +966,17 @@
 
             if (step.maneuver_type === "depart") {
                 return street
-                    ? `Walk straight on ${street}.`
-                    : "Walk straight.";
+                    ? `Keep moving on ${street}.`
+                    : "Keep moving straight ahead.";
             }
 
             if (step.maneuver_type === "continue") {
                 return street
-                    ? `Walk straight on ${street}.`
-                    : "Walk straight.";
+                    ? `Keep moving on ${street}.`
+                    : "Keep moving straight ahead.";
             }
 
-            return "Walk straight.";
+            return "Keep moving straight ahead.";
         }
 
         function shouldSpeakGuidance(key, force = false) {
@@ -1010,31 +1013,22 @@
             setNavText("Indoor mode ready. Choose your current location and destination, then start indoor route.");
             setVoiceStatus("Indoor navigation selected.");
             if (announce) {
-                speakGuidance("Indoor navigation selected. Choose your current location and destination, then start indoor route.", true);
+                speakGuidance("Alright. Indoor navigation is ready. Choose your current location and destination, then start the route.", true);
             }
-        }
-
-        function activateOutdoorMode(announce = false) {
-            currentMode = "outdoor";
-            routeActive = false;
-            hideIndoorPanel();
-            setModeText("Outdoor navigation");
-            setNavText("Outdoor mode ready. Say take me to your destination.");
-            setVoiceStatus("Outdoor navigation selected. Say take me to your destination.");
-            if (announce) {
-                speakGuidance("Outdoor navigation selected. Say take me to your destination.", true);
-            }
-            restartVoiceLoop();
         }
 
         async function startOutdoorNavigation() {
             try {
                 routeActive = true;
-                setNavText("Getting route...");
+                setModeText("Outdoor navigation");
+                setNavText("Getting your route");
                 setVoiceStatus(`Getting route to ${currentDestination}.`);
-                speakGuidance(`Getting route to ${currentDestination}.`, true);
+                speakGuidance(`Alright. Getting your route to ${currentDestination}.`, true);
 
-                await startHazardMonitoring();
+                const monitoringReady = await startHazardMonitoring();
+                if (monitoringReady) {
+                    speakGuidance("Camera is ready. Hazard monitoring is active.", false);
+                }
 
                 const position = await getCurrentLocationPromise();
 
@@ -1075,19 +1069,19 @@
                 if (outdoorSteps.length) {
                     const firstStep = normaliseStepText(outdoorSteps[0]);
                     setNavText(firstStep);
-                    setVoiceStatus(`Outdoor route ready to ${data.destination_name || currentDestination}.`);
-                    speakGuidance(`Route ready. ${firstStep}`, true);
+                    setVoiceStatus(`Route ready to ${data.destination_name || currentDestination}.`);
+                    speakGuidance(`Your route is ready. ${firstStep}`, true);
                     startStepTracking();
                 } else {
                     routeActive = false;
                     setNavText("Route ready");
-                    speakGuidance("Route ready.", true);
+                    speakGuidance("Your route is ready.", true);
                 }
             } catch (error) {
                 routeActive = false;
                 setNavText("Navigation error");
                 setVoiceStatus("Could not start navigation.");
-                speakGuidance("Could not start navigation.", true);
+                speakGuidance("I could not start navigation.", true);
                 currentDestination = "";
                 restartVoiceLoop();
             }
@@ -1100,9 +1094,9 @@
 
             try {
                 routeActive = true;
-                setNavText("Building indoor route...");
+                setNavText("Building indoor route");
                 setModeText("Indoor navigation");
-                speakGuidance("Building indoor route.", true);
+                speakGuidance("Alright. Building your indoor route.", true);
 
                 const response = await fetch("/navigate", {
                     method: "POST",
@@ -1129,15 +1123,15 @@
                     showRouteSummary(
                         `<strong>Indoor route ready.</strong><br>${data.steps.map(step => `• ${step}`).join("<br>")}`
                     );
-                    speakGuidance(`Indoor route ready. ${firstStep}`, true);
+                    speakGuidance(`Your indoor route is ready. ${firstStep}`, true);
                 } else {
                     setNavText("Indoor route ready.");
-                    speakGuidance("Indoor route ready.", true);
+                    speakGuidance("Your indoor route is ready.", true);
                 }
             } catch (error) {
                 routeActive = false;
                 setNavText("Indoor navigation error");
-                speakGuidance("Indoor navigation error.", true);
+                speakGuidance("There was a problem starting indoor navigation.", true);
             }
         }
 
@@ -1164,7 +1158,6 @@
 
             const userLat = position.coords.latitude;
             const userLon = position.coords.longitude;
-            lastKnownPosition = { lat: userLat, lon: userLon };
 
             const destinationDistance = getDestinationDistanceFromUser(userLat, userLon);
 
@@ -1227,15 +1220,11 @@
         }
 
         async function startNavigation() {
-            await startBackCamera();
             setHazardText("No hazard detected", "safe");
-            setVoiceStatus("Voice assistant ready.");
-            setModeText("Waiting for voice command");
-            setNavText("Say indoor navigation or say take me to your destination");
-            speakGuidance(
-                "NavGuid is ready. Say indoor navigation, outdoor navigation, or say take me to your destination.",
-                true
-            );
+            setModeText("Waiting for destination");
+            setVoiceStatus("Welcome to NavGuid. Where do you want to go?");
+            setNavText("Say indoor navigation or tell me where you want to go");
+            speakGuidance("Welcome to NavGuid. Where do you want to go?", true);
             startVoiceRecognition();
         }
 
@@ -1265,8 +1254,13 @@
             }
 
             if (config.mode === "outdoor") {
-                activateOutdoorMode(false);
-                speakGuidance("Outdoor navigation is ready. Say take me to your destination.", true);
+                currentMode = "outdoor";
+                hideIndoorPanel();
+                setModeText("Outdoor navigation");
+                setNavText("Tell me where you want to go");
+                setVoiceStatus("Outdoor navigation ready. Tell me where you want to go.");
+                speakGuidance("Alright. Tell me where you want to go.", true);
+                startVoiceRecognition();
             }
         }
 
@@ -1279,17 +1273,12 @@
             const config = getAutoStartConfig();
 
             if (config.autostart) {
-                startNavigation().then(() => {
-                    setTimeout(() => {
-                        runIncomingVoiceFlowFromUrl();
-                    }, 650);
-                });
+                setTimeout(() => {
+                    runIncomingVoiceFlowFromUrl();
+                }, 500);
             } else {
                 setTimeout(() => {
-                    speakGuidance(
-                        "NavGuid is ready. Say indoor navigation, outdoor navigation, or say take me to your destination.",
-                        true
-                    );
+                    speakGuidance("Welcome to NavGuid. Where do you want to go?", true);
                 }, 500);
             }
         });
