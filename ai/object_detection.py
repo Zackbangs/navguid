@@ -8,10 +8,17 @@ from ultralytics.nn.tasks import DetectionModel
 
 torch.serialization.add_safe_globals([DetectionModel])
 
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "yolov8n.pt")
-MODEL_PATH = os.path.abspath(MODEL_PATH)
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+MODEL_CANDIDATES = [
+    os.path.join(BASE_DIR, "yolo11s.pt"),
+    os.path.join(BASE_DIR, "yolo11n.pt"),
+    os.path.join(BASE_DIR, "yolov8n.pt"),
+]
 
 model = None
+MODEL_PATH_IN_USE = None
+TARGET_CLASS_IDS = None
 
 TARGET_CLASSES = {
     "person": ("warning", "Person"),
@@ -29,56 +36,75 @@ TARGET_CLASSES = {
     "traffic light": ("caution", "Pole-like obstacle"),
 }
 
-CONFIDENCE_THRESHOLD = 0.25
-CENTER_ZONE_WEIGHT = 1.12
-LOWER_SCREEN_BONUS = 1.10
-MAX_RETURNED_DETECTIONS = 6
-PREDICT_IMGSZ = 640
+CONFIDENCE_THRESHOLD = 0.20
+IOU_THRESHOLD = 0.50
+CENTER_ZONE_WEIGHT = 1.08
+LOWER_SCREEN_BONUS = 1.12
+MAX_RETURNED_DETECTIONS = 8
+PREDICT_IMGSZ = 960
 
 CLASS_MIN_CONFIDENCE = {
-    "person": 0.22,
-    "bicycle": 0.28,
-    "motorcycle": 0.30,
-    "car": 0.25,
-    "bus": 0.26,
-    "truck": 0.26,
-    "bench": 0.34,
-    "chair": 0.32,
-    "potted plant": 0.34,
-    "fire hydrant": 0.24,
-    "stop sign": 0.25,
-    "parking meter": 0.22,
-    "traffic light": 0.22,
+    "person": 0.18,
+    "bicycle": 0.24,
+    "motorcycle": 0.26,
+    "car": 0.20,
+    "bus": 0.22,
+    "truck": 0.22,
+    "bench": 0.30,
+    "chair": 0.28,
+    "potted plant": 0.30,
+    "fire hydrant": 0.20,
+    "stop sign": 0.20,
+    "parking meter": 0.19,
+    "traffic light": 0.19,
 }
 
 CLASS_MIN_AREA_RATIO = {
-    "person": 0.0020,
-    "bicycle": 0.0035,
-    "motorcycle": 0.0035,
-    "car": 0.0040,
-    "bus": 0.0050,
-    "truck": 0.0050,
-    "bench": 0.0055,
-    "chair": 0.0035,
-    "potted plant": 0.0040,
-    "fire hydrant": 0.0018,
-    "stop sign": 0.0018,
-    "parking meter": 0.0016,
-    "traffic light": 0.0014,
+    "person": 0.0012,
+    "bicycle": 0.0025,
+    "motorcycle": 0.0025,
+    "car": 0.0028,
+    "bus": 0.0038,
+    "truck": 0.0038,
+    "bench": 0.0042,
+    "chair": 0.0028,
+    "potted plant": 0.0030,
+    "fire hydrant": 0.0010,
+    "stop sign": 0.0010,
+    "parking meter": 0.0009,
+    "traffic light": 0.0008,
 }
 
-TARGET_CLASS_IDS = None
+
+def _resolve_model_path():
+    for candidate in MODEL_CANDIDATES:
+        if os.path.exists(candidate):
+            return os.path.abspath(candidate)
+    return None
 
 
 def get_model():
-    global model
-    if model is None:
-        model = YOLO(MODEL_PATH)
+    global model, MODEL_PATH_IN_USE
+
+    if model is not None:
+        return model
+
+    resolved_path = _resolve_model_path()
+
+    if resolved_path is None:
+        raise FileNotFoundError(
+            "No YOLO model file found. Add one of these to the project root: "
+            "yolo11s.pt, yolo11n.pt, or yolov8n.pt"
+        )
+
+    MODEL_PATH_IN_USE = resolved_path
+    model = YOLO(MODEL_PATH_IN_USE)
     return model
 
 
 def _build_target_class_ids():
     global TARGET_CLASS_IDS
+
     if TARGET_CLASS_IDS is not None:
         return TARGET_CLASS_IDS
 
@@ -102,6 +128,32 @@ def decode_base64_image(data_url: str):
     image_array = np.frombuffer(image_bytes, dtype=np.uint8)
     image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
     return image
+
+
+def preprocess_frame(frame):
+    """
+    Light enhancement for mobile / street camera frames.
+    Keeps structure simple while improving contrast and visibility.
+    """
+    if frame is None:
+        return None
+
+    enhanced = frame.copy()
+
+    # Mild denoise
+    enhanced = cv2.GaussianBlur(enhanced, (3, 3), 0)
+
+    # Improve local contrast on luminance channel
+    lab = cv2.cvtColor(enhanced, cv2.COLOR_BGR2LAB)
+    l_channel, a_channel, b_channel = cv2.split(lab)
+
+    clahe = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8))
+    l_channel = clahe.apply(l_channel)
+
+    merged = cv2.merge((l_channel, a_channel, b_channel))
+    enhanced = cv2.cvtColor(merged, cv2.COLOR_LAB2BGR)
+
+    return enhanced
 
 
 def make_result(
@@ -237,7 +289,7 @@ def _get_distance_label(area_ratio, bottom_ratio):
         return "very_close"
     if area_ratio >= 0.08 or bottom_ratio >= 0.84:
         return "close"
-    if area_ratio >= 0.025 or bottom_ratio >= 0.70:
+    if area_ratio >= 0.020 or bottom_ratio >= 0.68:
         return "ahead"
     return "far"
 
@@ -275,7 +327,7 @@ def _is_relevant_box(class_name, conf, x1, y1, x2, y2, width, height):
     box_height = max(1.0, y2 - y1)
     aspect_ratio = box_height / box_width
 
-    if class_name == "person" and aspect_ratio < 0.55:
+    if class_name == "person" and aspect_ratio < 0.45:
         return False
 
     return True
@@ -300,9 +352,9 @@ def _build_object_message(class_name, distance_label, direction_label, severity)
 
 def _severity_weight(severity):
     if severity == "urgent":
-        return 0.55
+        return 0.58
     if severity == "warning":
-        return 0.32
+        return 0.34
     return 0.18
 
 
@@ -314,21 +366,23 @@ def _build_detection_entry(class_name, severity, conf, x1, y1, x2, y2, width, he
     position_score = center_priority(x1, y1, x2, y2, width, height)
 
     score = (
-        (conf * 1.7)
+        (conf * 1.8)
         + position_score
-        + (area_ratio * 2.6)
+        + (area_ratio * 3.0)
         + _severity_weight(severity)
     )
 
     if distance_label == "very_close":
-        score += 0.65
+        score += 0.70
     elif distance_label == "close":
-        score += 0.35
+        score += 0.40
     elif distance_label == "ahead":
-        score += 0.15
+        score += 0.18
+    elif distance_label == "far":
+        score += 0.10
 
     if direction_label == "center":
-        score += 0.18
+        score += 0.20
 
     message = _build_object_message(class_name, distance_label, direction_label, severity)
 
@@ -351,10 +405,10 @@ def _build_detection_entry(class_name, severity, conf, x1, y1, x2, y2, width, he
 
 
 def detect_vertical_obstacle(gray_frame, height, width):
-    roi_x1 = int(width * 0.10)
-    roi_x2 = int(width * 0.90)
-    roi_y1 = int(height * 0.18)
-    roi_y2 = int(height * 0.95)
+    roi_x1 = int(width * 0.08)
+    roi_x2 = int(width * 0.92)
+    roi_y1 = int(height * 0.14)
+    roi_y2 = int(height * 0.96)
 
     roi = gray_frame[roi_y1:roi_y2, roi_x1:roi_x2]
     if roi.size == 0:
@@ -372,16 +426,16 @@ def detect_vertical_obstacle(gray_frame, height, width):
     for contour in contours:
         x, y, w, h = cv2.boundingRect(contour)
 
-        if h < roi_h * 0.16:
+        if h < roi_h * 0.14:
             continue
 
         width_ratio = w / max(float(roi_w), 1.0)
         height_ratio = h / max(float(roi_h), 1.0)
-        if width_ratio > 0.12:
+        if width_ratio > 0.14:
             continue
-        if width_ratio < 0.008:
+        if width_ratio < 0.006:
             continue
-        if height_ratio < 0.18:
+        if height_ratio < 0.16:
             continue
 
         x1 = roi_x1 + x
@@ -390,17 +444,19 @@ def detect_vertical_obstacle(gray_frame, height, width):
         y2 = y1 + h
 
         area_ratio = _box_area_ratio(x1, y1, x2, y2, width, height)
-        if area_ratio < 0.001:
+        if area_ratio < 0.0008:
             continue
 
         direction_label = _get_direction_label(x1, x2, width)
         distance_label = _get_distance_label(area_ratio, _box_bottom_ratio(y2, height))
-        score = (height_ratio * 1.4) + center_priority(x1, y1, x2, y2, width, height)
+        score = (height_ratio * 1.5) + center_priority(x1, y1, x2, y2, width, height)
 
         if distance_label == "very_close":
             score += 0.5
         elif distance_label == "close":
-            score += 0.25
+            score += 0.28
+        elif distance_label == "ahead":
+            score += 0.12
 
         if score > best_score:
             severity = "warning" if distance_label in ("very_close", "close") else "caution"
@@ -430,6 +486,7 @@ def detect_hazard_from_frame(frame):
     if frame is None:
         return make_result(False, None, None, "No valid frame available.")
 
+    frame = preprocess_frame(frame)
     height, width = frame.shape[:2]
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
@@ -447,8 +504,9 @@ def detect_hazard_from_frame(frame):
         source=frame,
         verbose=False,
         conf=CONFIDENCE_THRESHOLD,
+        iou=IOU_THRESHOLD,
         imgsz=PREDICT_IMGSZ,
-        max_det=12,
+        max_det=20,
         classes=target_ids,
         device="cpu"
     )
