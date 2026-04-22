@@ -5,13 +5,120 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NavGuid</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        :root {
+            --bg: #08244a;
+            --card: #0e315f;
+            --accent: #2f6fe4;
+            --accent-hover: #275fc4;
+            --text: #ffffff;
+            --muted: #d7e3ff;
+            --radius: 18px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+        }
+
+        .container {
+            max-width: 760px;
+            margin: 0 auto;
+            padding: 32px 18px 40px;
+            text-align: center;
+        }
+
+        .hero-card {
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 24px;
+            padding: 28px 20px;
+        }
+
+        h1 {
+            margin: 0 0 12px;
+            font-size: 2.5rem;
+        }
+
+        .subtitle {
+            color: var(--muted);
+            font-size: 1.08rem;
+            line-height: 1.6;
+            margin-bottom: 18px;
+        }
+
+        .voice-status {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 16px;
+            margin-top: 18px;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+
+        .button,
+        button {
+            display: inline-block;
+            width: 100%;
+            margin-top: 20px;
+            padding: 18px 20px;
+            border: none;
+            border-radius: 18px;
+            background: var(--accent);
+            color: white;
+            font-size: 1.15rem;
+            font-weight: 700;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .button:hover,
+        button:hover {
+            background: var(--accent-hover);
+        }
+
+        .support-note {
+            margin-top: 20px;
+            color: var(--muted);
+            font-size: 0.96rem;
+            line-height: 1.6;
+        }
+
+        @media (max-width: 640px) {
+            h1 {
+                font-size: 2rem;
+            }
+
+            .subtitle {
+                font-size: 1rem;
+            }
+        }
+    </style>
 </head>
 <body>
     <div class="container">
-        <h1>NavGuid</h1>
-        <p>Accessible indoor navigation for blind and visually impaired users.</p>
+        <div class="hero-card">
+            <h1>NavGuid</h1>
+            <div class="subtitle">
+                Voice-first indoor and outdoor navigation for blind and visually impaired users,
+                with live spoken guidance and hazard awareness support.
+            </div>
 
-        <a class="button" href="{{ url_for('navigation_page') }}">Start Navigation</a>
+            <div class="voice-status" id="homeVoiceStatus">
+                NavGuid is ready. Tap continue, then say indoor navigation or say take me to your destination.
+            </div>
+
+            <a class="button" href="{{ url_for('navigation_page') }}">Continue to Navigation</a>
+
+            <div class="support-note">
+                Voice-first interaction is recommended. The on-screen interface is a supporting fallback only.
+            </div>
+        </div>
     </div>
 </body>
 </html>

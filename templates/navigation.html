@@ -30,14 +30,14 @@
         }
 
         .container {
-            max-width: 780px;
+            max-width: 820px;
             margin: 0 auto;
             padding: 28px 18px 40px;
             text-align: center;
         }
 
         h1 {
-            margin: 10px 0 24px;
+            margin: 10px 0 14px;
             font-size: 2.4rem;
             line-height: 1.2;
         }
@@ -46,11 +46,13 @@
             color: var(--muted);
             font-size: 1rem;
             margin-bottom: 22px;
+            line-height: 1.6;
         }
 
         .status-card,
         .hazard-card,
-        .voice-card {
+        .voice-card,
+        .mode-card {
             background: rgba(255, 255, 255, 0.06);
             border-radius: var(--radius);
             padding: 18px;
@@ -59,7 +61,8 @@
 
         .status-title,
         .hazard-title,
-        .voice-title {
+        .voice-title,
+        .mode-title {
             font-size: 0.95rem;
             color: var(--muted);
             margin-bottom: 10px;
@@ -67,11 +70,18 @@
             letter-spacing: 0.04em;
         }
 
+        .mode-text {
+            font-size: 1.2rem;
+            font-weight: 700;
+            line-height: 1.5;
+            min-height: 40px;
+        }
+
         .main-status {
             font-size: 2rem;
             font-weight: 700;
             line-height: 1.3;
-            min-height: 90px;
+            min-height: 96px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -118,6 +128,27 @@
             pointer-events: none;
         }
 
+        .route-summary,
+        .indoor-panel {
+            margin-top: 18px;
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: var(--radius);
+            padding: 16px;
+            color: var(--muted);
+            line-height: 1.6;
+            text-align: left;
+        }
+
+        .indoor-panel select {
+            width: 100%;
+            margin-top: 10px;
+            margin-bottom: 12px;
+            padding: 14px;
+            border-radius: 14px;
+            border: none;
+            font-size: 1rem;
+        }
+
         .controls {
             margin-top: 22px;
             display: grid;
@@ -148,19 +179,13 @@
             background: rgba(255, 255, 255, 0.18);
         }
 
-        .route-summary {
-            margin-top: 18px;
-            background: rgba(255, 255, 255, 0.06);
-            border-radius: var(--radius);
-            padding: 16px;
-            color: var(--muted);
-            line-height: 1.6;
-            text-align: left;
-        }
-
         .small {
             font-size: 0.95rem;
             color: var(--muted);
+        }
+
+        .hidden {
+            display: none;
         }
 
         @media (max-width: 640px) {
@@ -187,17 +212,24 @@
     <div class="container">
         <h1>NavGuid Live Navigation</h1>
         <div class="hero-note">
-            Voice-first outdoor guidance with live hazard monitoring.
+            Voice-first indoor and outdoor guidance with live hazard monitoring.
         </div>
 
         <div class="voice-card">
             <div class="voice-title">Voice assistant</div>
-            <div id="voiceStatus" class="small">Tap Start Navigation, then say your destination.</div>
+            <div id="voiceStatus" class="small">
+                Tap Start Navigation, then say indoor navigation, outdoor navigation, or say take me to your destination.
+            </div>
+        </div>
+
+        <div class="mode-card">
+            <div class="mode-title">Current mode</div>
+            <div id="modeText" class="mode-text">Waiting for voice command</div>
         </div>
 
         <div class="status-card">
             <div class="status-title">Current guidance</div>
-            <div id="navText" class="main-status">Say your destination</div>
+            <div id="navText" class="main-status">Say indoor navigation or say take me to your destination</div>
         </div>
 
         <div class="hazard-card">
@@ -210,12 +242,43 @@
             <canvas id="overlayCanvas"></canvas>
         </div>
 
-        <div class="route-summary" id="routeSummary" style="display:none;"></div>
+        <div class="route-summary hidden" id="routeSummary"></div>
+
+        <div class="indoor-panel hidden" id="indoorPanel">
+            <strong>Indoor navigation</strong><br>
+            <label for="buildingSelect">Building</label>
+            <select id="buildingSelect">
+                <option value="torrens">Torrens</option>
+            </select>
+
+            <label for="indoorStart">Current location</label>
+            <select id="indoorStart">
+                <option value="entrance">Main Entrance</option>
+                <option value="reception">Reception</option>
+                <option value="hallway_a">Hallway A</option>
+                <option value="lift">Lift</option>
+                <option value="room_g12">Room G12</option>
+                <option value="toilet">Accessible Toilet</option>
+            </select>
+
+            <label for="indoorDestination">Destination</label>
+            <select id="indoorDestination">
+                <option value="entrance">Main Entrance</option>
+                <option value="reception">Reception</option>
+                <option value="hallway_a">Hallway A</option>
+                <option value="lift">Lift</option>
+                <option value="room_g12">Room G12</option>
+                <option value="toilet">Accessible Toilet</option>
+            </select>
+
+            <button onclick="startIndoorNavigation()">Start Indoor Route</button>
+        </div>
 
         <div class="controls">
             <button id="startBtn" onclick="startNavigation()">Start Navigation</button>
             <button class="secondary" onclick="startHazardMonitoring()">Start Hazard Monitoring</button>
             <button class="secondary" onclick="stopHazardMonitoring()">Stop Hazard Monitoring</button>
+            <button class="secondary" onclick="repeatCurrentInstruction()">Repeat Current Instruction</button>
             <button class="secondary" onclick="stopAll()">Stop Everything</button>
         </div>
     </div>
@@ -230,19 +293,27 @@
         let hazardMonitoringActive = false;
         let detectionBusy = false;
 
+        let currentMode = "";
         let currentDestination = "";
         let outdoorSteps = [];
+        let outdoorStepData = [];
         let currentStepIndex = 0;
         let trackingWatchId = null;
         let destinationCoords = null;
+        let arrivedAnnounced = false;
 
         let preferredVoice = null;
         let lastHazardSpeech = "";
         let lastHazardSpeechTime = 0;
+        let lastGuidanceSpeechKey = "";
+        let lastGuidanceSpeechTime = 0;
 
         const HAZARD_COOLDOWN_MS = 3500;
         const DESTINATION_ARRIVAL_THRESHOLD_M = 14;
         const STEP_REACHED_THRESHOLD_M = 18;
+        const APPROACH_DISTANCE_M = 22;
+        const NOW_TURN_DISTANCE_M = 8;
+        const GUIDANCE_COOLDOWN_MS = 5000;
 
         function initialiseVoices() {
             if (!("speechSynthesis" in window)) return;
@@ -330,6 +401,10 @@
 
         function setNavText(text) {
             document.getElementById("navText").textContent = text;
+        }
+
+        function setModeText(text) {
+            document.getElementById("modeText").textContent = text;
         }
 
         function setHazardText(text, mode = "normal") {
@@ -556,6 +631,25 @@
             setHazardText("Hazard monitoring stopped", "safe");
         }
 
+        function hideIndoorPanel() {
+            document.getElementById("indoorPanel").classList.add("hidden");
+        }
+
+        function showIndoorPanel() {
+            document.getElementById("indoorPanel").classList.remove("hidden");
+        }
+
+        function hideRouteSummary() {
+            document.getElementById("routeSummary").classList.add("hidden");
+            document.getElementById("routeSummary").innerHTML = "";
+        }
+
+        function showRouteSummary(html) {
+            const panel = document.getElementById("routeSummary");
+            panel.classList.remove("hidden");
+            panel.innerHTML = html;
+        }
+
         function startVoiceRecognition() {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -575,7 +669,7 @@
 
             recognitionActive = true;
             manualStop = false;
-            setVoiceStatus("Listening for your destination.");
+            setVoiceStatus("Listening for indoor navigation, outdoor navigation, or your destination.");
 
             recognition.start();
 
@@ -588,18 +682,53 @@
                     return;
                 }
 
-                currentDestination = transcript
-                    .replace(/^take me to\s+/i, "")
-                    .replace(/^navigate to\s+/i, "")
-                    .trim();
+                if (transcript.includes("indoor navigation")) {
+                    currentMode = "indoor";
+                    setModeText("Indoor navigation");
+                    setNavText("Indoor mode ready. Choose your current location and destination, then start indoor route.");
+                    showIndoorPanel();
+                    hideRouteSummary();
+                    speakGuidance("Indoor navigation selected. Choose your current location and destination, then start indoor route.", true);
+                    return;
+                }
 
-                if (!currentDestination) {
-                    speakGuidance("Please say your destination again.", true);
+                if (transcript.includes("outdoor navigation")) {
+                    currentMode = "outdoor";
+                    setModeText("Outdoor navigation");
+                    hideIndoorPanel();
+                    setNavText("Outdoor mode ready. Say take me to your destination.");
+                    speakGuidance("Outdoor navigation selected. Say take me to your destination.", true);
                     restartVoiceLoop();
                     return;
                 }
 
-                await startOutdoorNavigation();
+                if (transcript.startsWith("take me to") || transcript.startsWith("navigate to")) {
+                    currentMode = "outdoor";
+                    setModeText("Outdoor navigation");
+                    hideIndoorPanel();
+
+                    currentDestination = transcript
+                        .replace(/^take me to\s+/i, "")
+                        .replace(/^navigate to\s+/i, "")
+                        .trim();
+
+                    if (!currentDestination) {
+                        speakGuidance("Please say your destination again.", true);
+                        restartVoiceLoop();
+                        return;
+                    }
+
+                    await startOutdoorNavigation();
+                    return;
+                }
+
+                if (transcript.includes("repeat instruction")) {
+                    repeatCurrentInstruction();
+                    return;
+                }
+
+                speakGuidance("Please say indoor navigation, outdoor navigation, or say take me to your destination.", true);
+                restartVoiceLoop();
             };
 
             recognition.onerror = function() {
@@ -620,7 +749,7 @@
 
         function restartVoiceLoop() {
             setTimeout(() => {
-                if (!manualStop && !recognitionActive && !currentDestination) {
+                if (!manualStop && !recognitionActive && (!currentDestination || currentMode !== "outdoor")) {
                     startVoiceRecognition();
                 }
             }, 1000);
@@ -649,14 +778,19 @@
             stopTracking();
             stopHazardMonitoring();
             stopCamera();
+            currentMode = "";
             currentDestination = "";
             outdoorSteps = [];
+            outdoorStepData = [];
             currentStepIndex = 0;
             destinationCoords = null;
+            arrivedAnnounced = false;
             setVoiceStatus("Stopped.");
-            setNavText("Say your destination");
+            setModeText("Waiting for voice command");
+            setNavText("Say indoor navigation or say take me to your destination");
             setHazardText("No hazard detected", "safe");
-            document.getElementById("routeSummary").style.display = "none";
+            hideRouteSummary();
+            hideIndoorPanel();
             speechSynthesis.cancel();
         }
 
@@ -676,6 +810,108 @@
 
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
             return earthRadius * c;
+        }
+
+        function getStepDistanceFromUser(userLat, userLon, stepIndex) {
+            const step = outdoorStepData[stepIndex];
+            if (!step || step.lat === null || step.lon === null || step.lat === undefined || step.lon === undefined) {
+                return Infinity;
+            }
+
+            return haversineDistanceMeters(userLat, userLon, step.lat, step.lon);
+        }
+
+        function findBestCurrentStepIndex(userLat, userLon) {
+            if (!outdoorStepData.length) return currentStepIndex;
+
+            let bestIndex = currentStepIndex;
+            let bestDistance = Infinity;
+
+            const searchStart = Math.max(0, currentStepIndex);
+            const searchEnd = Math.min(outdoorStepData.length - 1, currentStepIndex + 3);
+
+            for (let i = searchStart; i <= searchEnd; i++) {
+                const step = outdoorStepData[i];
+                if (!step || step.maneuver_type === "arrive") continue;
+
+                const distance = getStepDistanceFromUser(userLat, userLon, i);
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    bestIndex = i;
+                }
+            }
+
+            return bestIndex;
+        }
+
+        function buildLiveInstruction(step, distanceToStep) {
+            if (!step) return "Continue straight.";
+
+            if (step.maneuver_type === "arrive") {
+                return "You have arrived at your destination.";
+            }
+
+            const modifier = (step.modifier || "").replaceAll("_", " ").trim().toLowerCase();
+            const street = (step.street_name || "").trim();
+
+            if (distanceToStep <= NOW_TURN_DISTANCE_M) {
+                if (step.maneuver_type === "turn" && modifier) {
+                    return street
+                        ? `Turn ${modifier} now onto ${street}.`
+                        : `Turn ${modifier} now.`;
+                }
+
+                if (step.maneuver_type === "fork" && modifier) {
+                    return `Keep ${modifier} now.`;
+                }
+
+                if (step.maneuver_type === "merge" && modifier) {
+                    return `Merge ${modifier} now.`;
+                }
+
+                return normaliseStepText(step.instruction);
+            }
+
+            if (distanceToStep <= APPROACH_DISTANCE_M) {
+                if (step.maneuver_type === "turn" && modifier) {
+                    return `In ${Math.round(distanceToStep)} meters, turn ${modifier}.`;
+                }
+
+                if (step.maneuver_type === "fork" && modifier) {
+                    return `In ${Math.round(distanceToStep)} meters, keep ${modifier}.`;
+                }
+
+                if (step.maneuver_type === "merge" && modifier) {
+                    return `In ${Math.round(distanceToStep)} meters, merge ${modifier}.`;
+                }
+
+                return `In ${Math.round(distanceToStep)} meters, ${normaliseStepText(step.instruction)}`;
+            }
+
+            return "Walk straight.";
+        }
+
+        function shouldSpeakGuidance(key, force = false) {
+            const now = Date.now();
+
+            if (force) {
+                lastGuidanceSpeechKey = key;
+                lastGuidanceSpeechTime = now;
+                return true;
+            }
+
+            if (key !== lastGuidanceSpeechKey) {
+                lastGuidanceSpeechKey = key;
+                lastGuidanceSpeechTime = now;
+                return true;
+            }
+
+            if (now - lastGuidanceSpeechTime >= GUIDANCE_COOLDOWN_MS) {
+                lastGuidanceSpeechTime = now;
+                return true;
+            }
+
+            return false;
         }
 
         async function startOutdoorNavigation() {
@@ -707,16 +943,16 @@
                 }
 
                 outdoorSteps = data.steps || [];
+                outdoorStepData = data.step_data || [];
                 currentStepIndex = 0;
                 destinationCoords = data.destination || null;
+                arrivedAnnounced = false;
 
-                const routeSummary = document.getElementById("routeSummary");
-                routeSummary.style.display = "block";
-                routeSummary.innerHTML = `
+                showRouteSummary(`
                     <strong>Destination:</strong> ${data.destination_name || currentDestination}<br>
                     <strong>Distance:</strong> ${data.distance_m || "Unknown"} metres<br>
                     <strong>Estimated Time:</strong> ${data.duration_min || "Unknown"} minutes
-                `;
+                `);
 
                 if (outdoorSteps.length) {
                     const firstStep = normaliseStepText(outdoorSteps[0]);
@@ -733,6 +969,51 @@
                 speakGuidance("Could not start navigation.", true);
                 currentDestination = "";
                 restartVoiceLoop();
+            }
+        }
+
+        async function startIndoorNavigation() {
+            const building = document.getElementById("buildingSelect").value;
+            const start = document.getElementById("indoorStart").value;
+            const destination = document.getElementById("indoorDestination").value;
+
+            try {
+                setNavText("Building indoor route...");
+                setModeText("Indoor navigation");
+                speakGuidance("Building indoor route.", true);
+
+                const response = await fetch("/navigate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        building,
+                        start,
+                        destination
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!data.success) {
+                    setNavText(data.message || "Indoor route failed.");
+                    speakGuidance(data.message || "Indoor route failed.", true);
+                    return;
+                }
+
+                if (data.steps && data.steps.length) {
+                    const firstStep = normaliseStepText(data.steps[0]);
+                    setNavText(firstStep);
+                    showRouteSummary(
+                        `<strong>Indoor route ready.</strong><br>${data.steps.map(step => `• ${step}`).join("<br>")}`
+                    );
+                    speakGuidance(`Indoor route ready. ${firstStep}`, true);
+                } else {
+                    setNavText("Indoor route ready.");
+                    speakGuidance("Indoor route ready.", true);
+                }
+            } catch (error) {
+                setNavText("Indoor navigation error");
+                speakGuidance("Indoor navigation error.", true);
             }
         }
 
@@ -755,35 +1036,84 @@
         }
 
         function handleLiveTracking(position) {
-            if (!outdoorSteps.length) return;
+            if (!outdoorSteps.length || !outdoorStepData.length) return;
+
+            const userLat = position.coords.latitude;
+            const userLon = position.coords.longitude;
 
             if (destinationCoords && destinationCoords.lat && destinationCoords.lon) {
                 const destinationDistance = haversineDistanceMeters(
-                    position.coords.latitude,
-                    position.coords.longitude,
+                    userLat,
+                    userLon,
                     destinationCoords.lat,
                     destinationCoords.lon
                 );
 
                 if (destinationDistance <= DESTINATION_ARRIVAL_THRESHOLD_M) {
-                    setNavText("You have arrived");
-                    speakGuidance("You have arrived at your destination.", true);
+                    if (!arrivedAnnounced) {
+                        arrivedAnnounced = true;
+                        setNavText("You have arrived");
+                        speakGuidance("You have arrived at your destination.", true);
+                    }
                     stopTracking();
                     return;
                 }
             }
 
-            if (currentStepIndex >= outdoorSteps.length) return;
+            const bestIndex = findBestCurrentStepIndex(userLat, userLon);
+            if (bestIndex > currentStepIndex) {
+                currentStepIndex = bestIndex;
+            }
 
-            const currentStep = normaliseStepText(outdoorSteps[currentStepIndex]);
-            setNavText(currentStep);
+            const currentStep = outdoorStepData[currentStepIndex];
+            if (!currentStep) return;
+
+            const distanceToStep = getStepDistanceFromUser(userLat, userLon, currentStepIndex);
+            const liveInstruction = buildLiveInstruction(currentStep, distanceToStep);
+
+            setNavText(liveInstruction);
+
+            const speechKey = `${currentStepIndex}|${Math.round(distanceToStep / 4)}|${liveInstruction}`;
+
+            if (distanceToStep <= STEP_REACHED_THRESHOLD_M && currentStepIndex < outdoorStepData.length - 1) {
+                currentStepIndex += 1;
+
+                const nextStep = outdoorStepData[currentStepIndex];
+                if (nextStep) {
+                    const nextDistance = getStepDistanceFromUser(userLat, userLon, currentStepIndex);
+                    const nextInstruction = buildLiveInstruction(nextStep, nextDistance);
+                    setNavText(nextInstruction);
+
+                    const nextKey = `next|${currentStepIndex}|${Math.round(nextDistance / 4)}|${nextInstruction}`;
+                    if (shouldSpeakGuidance(nextKey, true)) {
+                        speakGuidance(nextInstruction, true);
+                    }
+                }
+                return;
+            }
+
+            if (shouldSpeakGuidance(speechKey, false)) {
+                speakGuidance(liveInstruction, false);
+            }
+        }
+
+        function repeatCurrentInstruction() {
+            const text = document.getElementById("navText").textContent;
+            if (text) {
+                speakGuidance(text, true);
+            }
         }
 
         async function startNavigation() {
             await startBackCamera();
             setHazardText("No hazard detected", "safe");
             setVoiceStatus("Voice assistant ready.");
-            speakGuidance("NavGuid is ready. Please say your destination.", true);
+            setModeText("Waiting for voice command");
+            setNavText("Say indoor navigation or say take me to your destination");
+            speakGuidance(
+                "NavGuid is ready. Say indoor navigation, outdoor navigation, or say take me to your destination.",
+                true
+            );
             startVoiceRecognition();
         }
 
