@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, jsonify
 from services.navigation_service import get_route_steps
 from services.outdoor_service import get_outdoor_route
 from ai.object_detection import detect_hazard_from_base64
+import os
 
 app = Flask(__name__)
 
@@ -18,7 +19,7 @@ def navigation_page():
 
 @app.route("/navigate", methods=["POST"])
 def navigate():
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
 
     building = data.get("building")
     start = data.get("start")
@@ -36,7 +37,7 @@ def navigate():
 
 @app.route("/outdoor-navigate", methods=["POST"])
 def outdoor_navigate():
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
 
     start_lat = data.get("start_lat")
     start_lon = data.get("start_lon")
@@ -48,13 +49,51 @@ def outdoor_navigate():
             "message": "Current location and destination are required."
         }), 400
 
+    try:
+        start_lat = float(start_lat)
+        start_lon = float(start_lon)
+    except (TypeError, ValueError):
+        return jsonify({
+            "success": False,
+            "message": "Latitude and longitude must be valid numbers."
+        }), 400
+
     result = get_outdoor_route(start_lat, start_lon, destination_query)
     return jsonify(result)
 
 
+# Optional compatibility alias if any frontend still uses /route
+@app.route("/route", methods=["GET", "POST"])
+def route_alias():
+    if request.method == "GET":
+        destination_query = request.args.get("destination")
+        start_lat = request.args.get("start_lat")
+        start_lon = request.args.get("start_lon")
+
+        if start_lat is None or start_lon is None or not destination_query:
+            return jsonify({
+                "success": False,
+                "message": "Current location and destination are required."
+            }), 400
+
+        try:
+            start_lat = float(start_lat)
+            start_lon = float(start_lon)
+        except (TypeError, ValueError):
+            return jsonify({
+                "success": False,
+                "message": "Latitude and longitude must be valid numbers."
+            }), 400
+
+        result = get_outdoor_route(start_lat, start_lon, destination_query)
+        return jsonify(result)
+
+    return outdoor_navigate()
+
+
 @app.route("/detect-hazard", methods=["POST"])
 def detect_hazard():
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     frame_data = data.get("frame")
 
     if not frame_data:
@@ -63,21 +102,57 @@ def detect_hazard():
             "message": "No camera frame received."
         }), 400
 
-    result = detect_hazard_from_base64(frame_data)
-    return jsonify({
-        "success": True,
-        "hazard_detected": result["hazard_detected"],
-        "hazard_type": result["hazard_type"],
-        "severity": result["severity"],
-        "message": result["message"],
-        "distance_label": result.get("distance_label"),
-        "direction_label": result.get("direction_label"),
-        "bbox": result.get("bbox"),
-        "detections": result.get("detections", [])
-    })
+    try:
+        result = detect_hazard_from_base64(frame_data)
+        return jsonify({
+            "success": True,
+            "hazard_detected": result.get("hazard_detected", False),
+            "hazard_type": result.get("hazard_type"),
+            "severity": result.get("severity"),
+            "message": result.get("message", "No immediate hazard detected."),
+            "distance_label": result.get("distance_label"),
+            "direction_label": result.get("direction_label"),
+            "bbox": result.get("bbox"),
+            "detections": result.get("detections", [])
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": f"Hazard detection failed: {str(e)}"
+        }), 500
 
 
-import os
+# Optional compatibility alias if any frontend still uses /detect
+@app.route("/detect", methods=["POST"])
+def detect_alias():
+    data = request.get_json(silent=True) or {}
+    image_data = data.get("image")
+
+    if not image_data:
+        return jsonify({
+            "success": False,
+            "message": "No camera frame received."
+        }), 400
+
+    try:
+        result = detect_hazard_from_base64(image_data)
+        return jsonify({
+            "success": True,
+            "hazard_detected": result.get("hazard_detected", False),
+            "hazard_type": result.get("hazard_type"),
+            "severity": result.get("severity"),
+            "message": result.get("message", "No immediate hazard detected."),
+            "distance_label": result.get("distance_label"),
+            "direction_label": result.get("direction_label"),
+            "bbox": result.get("bbox"),
+            "detections": result.get("detections", [])
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": f"Hazard detection failed: {str(e)}"
+        }), 500
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
