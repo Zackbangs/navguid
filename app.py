@@ -62,35 +62,6 @@ def outdoor_navigate():
     return jsonify(result)
 
 
-# Optional compatibility alias if any frontend still uses /route
-@app.route("/route", methods=["GET", "POST"])
-def route_alias():
-    if request.method == "GET":
-        destination_query = request.args.get("destination")
-        start_lat = request.args.get("start_lat")
-        start_lon = request.args.get("start_lon")
-
-        if start_lat is None or start_lon is None or not destination_query:
-            return jsonify({
-                "success": False,
-                "message": "Current location and destination are required."
-            }), 400
-
-        try:
-            start_lat = float(start_lat)
-            start_lon = float(start_lon)
-        except (TypeError, ValueError):
-            return jsonify({
-                "success": False,
-                "message": "Latitude and longitude must be valid numbers."
-            }), 400
-
-        result = get_outdoor_route(start_lat, start_lon, destination_query)
-        return jsonify(result)
-
-    return outdoor_navigate()
-
-
 @app.route("/detect-hazard", methods=["POST"])
 def detect_hazard():
     data = request.get_json(silent=True) or {}
@@ -104,38 +75,6 @@ def detect_hazard():
 
     try:
         result = detect_hazard_from_base64(frame_data)
-        return jsonify({
-            "success": True,
-            "hazard_detected": result.get("hazard_detected", False),
-            "hazard_type": result.get("hazard_type"),
-            "severity": result.get("severity"),
-            "message": result.get("message", "No immediate hazard detected."),
-            "distance_label": result.get("distance_label"),
-            "direction_label": result.get("direction_label"),
-            "bbox": result.get("bbox"),
-            "detections": result.get("detections", [])
-        })
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "message": f"Hazard detection failed: {str(e)}"
-        }), 500
-
-
-# Optional compatibility alias if any frontend still uses /detect
-@app.route("/detect", methods=["POST"])
-def detect_alias():
-    data = request.get_json(silent=True) or {}
-    image_data = data.get("image")
-
-    if not image_data:
-        return jsonify({
-            "success": False,
-            "message": "No camera frame received."
-        }), 400
-
-    try:
-        result = detect_hazard_from_base64(image_data)
         return jsonify({
             "success": True,
             "hazard_detected": result.get("hazard_detected", False),

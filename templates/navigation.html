@@ -1,188 +1,793 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NavGuid</title>
-
-<style>
-body {
-    margin: 0;
-    font-family: Arial;
-    background: #0b1f3a;
-    color: white;
-    text-align: center;
-}
-
-.container {
-    padding: 20px;
-}
-
-.big-text {
-    font-size: 22px;
-    margin: 15px 0;
-}
-
-.status {
-    font-size: 26px;
-    font-weight: bold;
-    margin-top: 20px;
-}
-
-.hazard {
-    font-size: 22px;
-    margin-top: 10px;
-    color: #ffcc00;
-}
-
-button {
-    width: 90%;
-    padding: 18px;
-    font-size: 20px;
-    margin-top: 20px;
-    border-radius: 12px;
-    border: none;
-    background: #2d6cdf;
-    color: white;
-}
-
-video {
-    width: 100%;
-    border-radius: 15px;
-    margin-top: 15px;
-}
-</style>
-</head>
-
-<body>
-
-<div class="container">
-
-    <h2>NavGuid Live Navigation</h2>
-
-    <!-- CAMERA -->
-    <video id="camera" autoplay playsinline></video>
-
-    <!-- NAVIGATION STATUS -->
-    <div class="status" id="navText">
-        Say your destination
-    </div>
-
-    <!-- HAZARD ALERT -->
-    <div class="hazard" id="hazardText">
-        No hazard detected
-    </div>
-
-    <!-- CONTROL -->
-    <button onclick="startNavigation()">Start Navigation</button>
-
-</div>
-
-<script>
-let recognition;
-let destination = "";
-let currentStep = 0;
-let steps = [];
-
-function speak(text) {
-    const msg = new SpeechSynthesisUtterance(text);
-    msg.rate = 0.9;
-    msg.pitch = 1;
-    speechSynthesis.speak(msg);
-}
-
-function startNavigation() {
-    startVoice();
-    startCamera();
-}
-
-function startVoice() {
-    recognition = new webkitSpeechRecognition();
-    recognition.continuous = true;
-
-    recognition.onresult = (event) => {
-        let transcript = event.results[event.results.length - 1][0].transcript;
-
-        if (!destination) {
-            destination = transcript;
-            document.getElementById("navText").innerText = "Getting route...";
-            speak("Getting route to " + destination);
-            getRoute(destination);
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NavGuid Live Navigation</title>
+    <style>
+        :root {
+            --bg: #08244a;
+            --card: #0e315f;
+            --accent: #2f6fe4;
+            --accent-hover: #275fc4;
+            --text: #ffffff;
+            --muted: #d7e3ff;
+            --warning: #ffd43b;
+            --danger: #ff6b6b;
+            --safe: #8ce99a;
+            --radius: 18px;
         }
-    };
 
-    recognition.start();
-}
+        * {
+            box-sizing: border-box;
+        }
 
-function getRoute(dest) {
-    fetch("/route?destination=" + dest)
-        .then(res => res.json())
-        .then(data => {
-            steps = data.steps;
-            currentStep = 0;
-            speakStep();
-            trackPosition();
-        });
-}
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+        }
 
-function speakStep() {
-    if (steps[currentStep]) {
-        let step = steps[currentStep];
-        document.getElementById("navText").innerText = step;
-        speak(step);
-    }
-}
+        .container {
+            max-width: 780px;
+            margin: 0 auto;
+            padding: 28px 18px 40px;
+            text-align: center;
+        }
 
-function trackPosition() {
-    navigator.geolocation.watchPosition(pos => {
-        nextStep();
-    });
-}
+        h1 {
+            margin: 10px 0 24px;
+            font-size: 2.4rem;
+            line-height: 1.2;
+        }
 
-function nextStep() {
-    if (currentStep < steps.length - 1) {
-        currentStep++;
-        speakStep();
-    } else {
-        speak("You have arrived");
-    }
-}
+        .hero-note {
+            color: var(--muted);
+            font-size: 1rem;
+            margin-bottom: 22px;
+        }
 
-function startCamera() {
-    navigator.mediaDevices.getUserMedia({ video: true })
-    .then(stream => {
-        document.getElementById("camera").srcObject = stream;
-        detectHazard();
-    });
-}
+        .status-card,
+        .hazard-card,
+        .voice-card {
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: var(--radius);
+            padding: 18px;
+            margin-top: 16px;
+        }
 
-function detectHazard() {
-    const video = document.getElementById("camera");
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
+        .status-title,
+        .hazard-title,
+        .voice-title {
+            font-size: 0.95rem;
+            color: var(--muted);
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
 
-    setInterval(() => {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        ctx.drawImage(video, 0, 0);
+        .main-status {
+            font-size: 2rem;
+            font-weight: 700;
+            line-height: 1.3;
+            min-height: 90px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px;
+        }
 
-        let data = canvas.toDataURL("image/jpeg");
+        .hazard-status {
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: var(--warning);
+            line-height: 1.4;
+            min-height: 56px;
+        }
 
-        fetch("/detect", {
-            method: "POST",
-            body: JSON.stringify({ image: data }),
-            headers: { "Content-Type": "application/json" }
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.hazard_detected) {
-                document.getElementById("hazardText").innerText = data.message;
-                speak(data.message);
+        .hazard-status.safe {
+            color: var(--safe);
+        }
+
+        .hazard-status.urgent {
+            color: var(--danger);
+        }
+
+        .camera-wrap {
+            position: relative;
+            width: 100%;
+            margin-top: 18px;
+            border-radius: 22px;
+            overflow: hidden;
+            background: #000;
+            min-height: 260px;
+        }
+
+        video {
+            width: 100%;
+            display: block;
+            background: #000;
+        }
+
+        canvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .controls {
+            margin-top: 22px;
+            display: grid;
+            gap: 14px;
+        }
+
+        button {
+            width: 100%;
+            padding: 18px 20px;
+            border: none;
+            border-radius: 18px;
+            background: var(--accent);
+            color: white;
+            font-size: 1.15rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: var(--accent-hover);
+        }
+
+        .secondary {
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .secondary:hover {
+            background: rgba(255, 255, 255, 0.18);
+        }
+
+        .route-summary {
+            margin-top: 18px;
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: var(--radius);
+            padding: 16px;
+            color: var(--muted);
+            line-height: 1.6;
+            text-align: left;
+        }
+
+        .small {
+            font-size: 0.95rem;
+            color: var(--muted);
+        }
+
+        @media (max-width: 640px) {
+            h1 {
+                font-size: 2rem;
             }
-        });
 
-    }, 2000);
-}
-</script>
+            .main-status {
+                font-size: 1.6rem;
+                min-height: 110px;
+            }
 
+            .hazard-status {
+                font-size: 1.1rem;
+            }
+
+            .camera-wrap {
+                min-height: 220px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>NavGuid Live Navigation</h1>
+        <div class="hero-note">
+            Voice-first outdoor guidance with live hazard monitoring.
+        </div>
+
+        <div class="voice-card">
+            <div class="voice-title">Voice assistant</div>
+            <div id="voiceStatus" class="small">Tap Start Navigation, then say your destination.</div>
+        </div>
+
+        <div class="status-card">
+            <div class="status-title">Current guidance</div>
+            <div id="navText" class="main-status">Say your destination</div>
+        </div>
+
+        <div class="hazard-card">
+            <div class="hazard-title">Hazard status</div>
+            <div id="hazardText" class="hazard-status">No hazard detected</div>
+        </div>
+
+        <div class="camera-wrap">
+            <video id="cameraFeed" autoplay playsinline muted></video>
+            <canvas id="overlayCanvas"></canvas>
+        </div>
+
+        <div class="route-summary" id="routeSummary" style="display:none;"></div>
+
+        <div class="controls">
+            <button id="startBtn" onclick="startNavigation()">Start Navigation</button>
+            <button class="secondary" onclick="startHazardMonitoring()">Start Hazard Monitoring</button>
+            <button class="secondary" onclick="stopHazardMonitoring()">Stop Hazard Monitoring</button>
+            <button class="secondary" onclick="stopAll()">Stop Everything</button>
+        </div>
+    </div>
+
+    <script>
+        let recognition = null;
+        let recognitionActive = false;
+        let manualStop = false;
+
+        let cameraStream = null;
+        let hazardInterval = null;
+        let hazardMonitoringActive = false;
+        let detectionBusy = false;
+
+        let currentDestination = "";
+        let outdoorSteps = [];
+        let currentStepIndex = 0;
+        let trackingWatchId = null;
+        let destinationCoords = null;
+
+        let preferredVoice = null;
+        let lastHazardSpeech = "";
+        let lastHazardSpeechTime = 0;
+
+        const HAZARD_COOLDOWN_MS = 3500;
+        const DESTINATION_ARRIVAL_THRESHOLD_M = 14;
+        const STEP_REACHED_THRESHOLD_M = 18;
+
+        function initialiseVoices() {
+            if (!("speechSynthesis" in window)) return;
+
+            const voices = speechSynthesis.getVoices();
+            if (!voices.length) return;
+
+            preferredVoice =
+                voices.find(v => v.lang === "en-AU" && /female|samantha|karen|moira/i.test(v.name)) ||
+                voices.find(v => v.lang === "en-AU") ||
+                voices.find(v => v.lang.startsWith("en") && /google|natural|samantha|serena|daniel/i.test(v.name)) ||
+                voices.find(v => v.lang.startsWith("en")) ||
+                voices[0];
+        }
+
+        if ("speechSynthesis" in window) {
+            speechSynthesis.onvoiceschanged = initialiseVoices;
+            initialiseVoices();
+        }
+
+        function splitSpeechIntoChunks(text) {
+            if (!text) return [];
+            return text
+                .replace(/\s+/g, " ")
+                .trim()
+                .split(/(?<=[.!?])\s+/)
+                .filter(Boolean);
+        }
+
+        function speakText(text, priority = false, options = {}) {
+            if (!("speechSynthesis" in window) || !text) return;
+
+            if (priority) {
+                speechSynthesis.cancel();
+            }
+
+            const chunks = splitSpeechIntoChunks(text);
+            if (!chunks.length) return;
+
+            const rate = options.rate ?? 0.92;
+            const pitch = options.pitch ?? 1.0;
+            const pauseMs = options.pauseMs ?? 200;
+
+            function speakChunk(index) {
+                if (index >= chunks.length) return;
+
+                const utterance = new SpeechSynthesisUtterance(chunks[index]);
+                utterance.lang = preferredVoice?.lang || "en-AU";
+                utterance.voice = preferredVoice || null;
+                utterance.rate = rate;
+                utterance.pitch = pitch;
+                utterance.volume = 1;
+
+                utterance.onend = () => {
+                    if (index + 1 < chunks.length) {
+                        setTimeout(() => speakChunk(index + 1), pauseMs);
+                    }
+                };
+
+                speechSynthesis.speak(utterance);
+            }
+
+            speakChunk(0);
+        }
+
+        function speakGuidance(text, priority = false) {
+            speakText(text, priority, { rate: 0.90, pauseMs: 240 });
+        }
+
+        function speakHazard(text, priority = true) {
+            const now = Date.now();
+
+            if (text === lastHazardSpeech && now - lastHazardSpeechTime < HAZARD_COOLDOWN_MS) {
+                return;
+            }
+
+            lastHazardSpeech = text;
+            lastHazardSpeechTime = now;
+            speakText(text, priority, { rate: 0.88, pauseMs: 180 });
+        }
+
+        function setVoiceStatus(text) {
+            document.getElementById("voiceStatus").textContent = text;
+        }
+
+        function setNavText(text) {
+            document.getElementById("navText").textContent = text;
+        }
+
+        function setHazardText(text, mode = "normal") {
+            const hazardText = document.getElementById("hazardText");
+            hazardText.textContent = text;
+            hazardText.classList.remove("safe", "urgent");
+
+            if (mode === "safe") {
+                hazardText.classList.add("safe");
+            } else if (mode === "urgent") {
+                hazardText.classList.add("urgent");
+            }
+        }
+
+        function normaliseStepText(step) {
+            if (!step) return "Continue straight.";
+
+            return step
+                .replace(/slight right/gi, "slightly right")
+                .replace(/slight left/gi, "slightly left")
+                .replace(/continue/gi, "walk straight")
+                .replace(/onto/gi, "onto")
+                .replace(/metres/gi, "meters");
+        }
+
+        function getCurrentLocationPromise() {
+            return new Promise((resolve, reject) => {
+                if (!navigator.geolocation) {
+                    reject(new Error("Geolocation is not supported in this browser."));
+                    return;
+                }
+
+                navigator.geolocation.getCurrentPosition(
+                    resolve,
+                    reject,
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 0
+                    }
+                );
+            });
+        }
+
+        async function startBackCamera() {
+            const video = document.getElementById("cameraFeed");
+
+            if (cameraStream) return true;
+
+            try {
+                cameraStream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: { ideal: "environment" },
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    },
+                    audio: false
+                });
+
+                video.srcObject = cameraStream;
+                return true;
+            } catch (error) {
+                try {
+                    cameraStream = await navigator.mediaDevices.getUserMedia({
+                        video: true,
+                        audio: false
+                    });
+                    video.srcObject = cameraStream;
+                    return true;
+                } catch (fallbackError) {
+                    setHazardText("Could not access camera", "urgent");
+                    return false;
+                }
+            }
+        }
+
+        function stopCamera() {
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+                cameraStream = null;
+            }
+
+            const video = document.getElementById("cameraFeed");
+            video.srcObject = null;
+
+            const overlay = document.getElementById("overlayCanvas");
+            const ctx = overlay.getContext("2d");
+            ctx.clearRect(0, 0, overlay.width, overlay.height);
+        }
+
+        function syncOverlaySize() {
+            const video = document.getElementById("cameraFeed");
+            const overlay = document.getElementById("overlayCanvas");
+            const rect = video.getBoundingClientRect();
+            overlay.width = rect.width;
+            overlay.height = rect.height;
+        }
+
+        function getBoxColor(severity) {
+            if (severity === "urgent") return "#ff4d4f";
+            if (severity === "warning") return "#ffd43b";
+            return "#8ce99a";
+        }
+
+        function drawDetections(detections) {
+            const video = document.getElementById("cameraFeed");
+            const overlay = document.getElementById("overlayCanvas");
+            const ctx = overlay.getContext("2d");
+
+            if (!video.videoWidth || !video.videoHeight) return;
+
+            syncOverlaySize();
+            ctx.clearRect(0, 0, overlay.width, overlay.height);
+            ctx.lineWidth = 3;
+            ctx.font = "bold 14px Arial";
+
+            const scaleX = overlay.width / video.videoWidth;
+            const scaleY = overlay.height / video.videoHeight;
+
+            detections.forEach((item) => {
+                if (!item.bbox) return;
+
+                const x1 = item.bbox.x1 * scaleX;
+                const y1 = item.bbox.y1 * scaleY;
+                const x2 = item.bbox.x2 * scaleX;
+                const y2 = item.bbox.y2 * scaleY;
+
+                const width = x2 - x1;
+                const height = y2 - y1;
+                const color = getBoxColor(item.severity);
+
+                ctx.strokeStyle = color;
+                ctx.fillStyle = color;
+                ctx.strokeRect(x1, y1, width, height);
+
+                const label = [
+                    item.hazard_type ? item.hazard_type.replaceAll("_", " ") : "",
+                    item.distance_label || "",
+                    item.direction_label || ""
+                ].filter(Boolean).join(" • ");
+
+                const textWidth = ctx.measureText(label).width + 12;
+                const textY = Math.max(24, y1 - 8);
+
+                ctx.fillRect(x1, textY - 22, textWidth, 24);
+                ctx.fillStyle = "#ffffff";
+                ctx.fillText(label, x1 + 6, textY - 5);
+            });
+        }
+
+        async function captureAndDetectHazard() {
+            if (!hazardMonitoringActive || detectionBusy) return;
+
+            const video = document.getElementById("cameraFeed");
+            if (!video.videoWidth || !video.videoHeight) return;
+
+            detectionBusy = true;
+
+            try {
+                const canvas = document.createElement("canvas");
+                const ctx = canvas.getContext("2d");
+
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                const frameData = canvas.toDataURL("image/jpeg", 0.72);
+
+                const response = await fetch("/detect-hazard", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ frame: frameData })
+                });
+
+                const data = await response.json();
+
+                if (!data.success) {
+                    setHazardText("Hazard detection unavailable", "urgent");
+                    return;
+                }
+
+                drawDetections(data.detections || []);
+
+                if (data.hazard_detected) {
+                    setHazardText(data.message || "Hazard detected", data.severity === "urgent" ? "urgent" : "normal");
+                    speakHazard(data.message || "Hazard detected");
+                } else {
+                    setHazardText("No hazard detected", "safe");
+                }
+            } catch (error) {
+                setHazardText("Hazard detection error", "urgent");
+            } finally {
+                detectionBusy = false;
+            }
+        }
+
+        async function startHazardMonitoring() {
+            const cameraReady = await startBackCamera();
+            if (!cameraReady) return;
+
+            hazardMonitoringActive = true;
+            setHazardText("Hazard monitoring active", "safe");
+
+            const video = document.getElementById("cameraFeed");
+            video.onloadedmetadata = () => {
+                syncOverlaySize();
+            };
+
+            if (hazardInterval) {
+                clearInterval(hazardInterval);
+            }
+
+            hazardInterval = setInterval(captureAndDetectHazard, 1600);
+        }
+
+        function stopHazardMonitoring() {
+            hazardMonitoringActive = false;
+
+            if (hazardInterval) {
+                clearInterval(hazardInterval);
+                hazardInterval = null;
+            }
+
+            setHazardText("Hazard monitoring stopped", "safe");
+        }
+
+        function startVoiceRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+            if (!SpeechRecognition) {
+                setVoiceStatus("Voice recognition not supported on this device.");
+                speakGuidance("Voice recognition is not supported on this device.", true);
+                return;
+            }
+
+            if (recognitionActive) return;
+
+            recognition = new SpeechRecognition();
+            recognition.lang = "en-AU";
+            recognition.interimResults = false;
+            recognition.maxAlternatives = 1;
+            recognition.continuous = false;
+
+            recognitionActive = true;
+            manualStop = false;
+            setVoiceStatus("Listening for your destination.");
+
+            recognition.start();
+
+            recognition.onresult = async function(event) {
+                const transcript = event.results[0][0].transcript.toLowerCase().trim();
+                setVoiceStatus(`Heard: ${transcript}`);
+
+                if (transcript.includes("stop listening")) {
+                    stopAll();
+                    return;
+                }
+
+                currentDestination = transcript
+                    .replace(/^take me to\s+/i, "")
+                    .replace(/^navigate to\s+/i, "")
+                    .trim();
+
+                if (!currentDestination) {
+                    speakGuidance("Please say your destination again.", true);
+                    restartVoiceLoop();
+                    return;
+                }
+
+                await startOutdoorNavigation();
+            };
+
+            recognition.onerror = function() {
+                recognitionActive = false;
+                if (!manualStop) {
+                    setVoiceStatus("Voice input failed. Listening again.");
+                    restartVoiceLoop();
+                }
+            };
+
+            recognition.onend = function() {
+                recognitionActive = false;
+                if (!manualStop && !currentDestination) {
+                    restartVoiceLoop();
+                }
+            };
+        }
+
+        function restartVoiceLoop() {
+            setTimeout(() => {
+                if (!manualStop && !recognitionActive && !currentDestination) {
+                    startVoiceRecognition();
+                }
+            }, 1000);
+        }
+
+        function stopVoiceRecognition() {
+            manualStop = true;
+            if (recognition) {
+                try {
+                    recognition.stop();
+                } catch (error) {
+                }
+            }
+            recognitionActive = false;
+        }
+
+        function stopTracking() {
+            if (trackingWatchId !== null) {
+                navigator.geolocation.clearWatch(trackingWatchId);
+                trackingWatchId = null;
+            }
+        }
+
+        function stopAll() {
+            stopVoiceRecognition();
+            stopTracking();
+            stopHazardMonitoring();
+            stopCamera();
+            currentDestination = "";
+            outdoorSteps = [];
+            currentStepIndex = 0;
+            destinationCoords = null;
+            setVoiceStatus("Stopped.");
+            setNavText("Say your destination");
+            setHazardText("No hazard detected", "safe");
+            document.getElementById("routeSummary").style.display = "none";
+            speechSynthesis.cancel();
+        }
+
+        function toRadians(value) {
+            return value * Math.PI / 180;
+        }
+
+        function haversineDistanceMeters(lat1, lon1, lat2, lon2) {
+            const earthRadius = 6371000;
+            const dLat = toRadians(lat2 - lat1);
+            const dLon = toRadians(lon2 - lon1);
+
+            const a =
+                Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return earthRadius * c;
+        }
+
+        async function startOutdoorNavigation() {
+            try {
+                setNavText("Getting route...");
+                speakGuidance(`Getting route to ${currentDestination}.`, true);
+
+                const position = await getCurrentLocationPromise();
+
+                const response = await fetch("/outdoor-navigate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        start_lat: position.coords.latitude,
+                        start_lon: position.coords.longitude,
+                        destination: currentDestination
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!data.success) {
+                    setNavText("Could not get route");
+                    setVoiceStatus(data.message || "Route error");
+                    speakGuidance(data.message || "I could not get the route.", true);
+                    currentDestination = "";
+                    restartVoiceLoop();
+                    return;
+                }
+
+                outdoorSteps = data.steps || [];
+                currentStepIndex = 0;
+                destinationCoords = data.destination || null;
+
+                const routeSummary = document.getElementById("routeSummary");
+                routeSummary.style.display = "block";
+                routeSummary.innerHTML = `
+                    <strong>Destination:</strong> ${data.destination_name || currentDestination}<br>
+                    <strong>Distance:</strong> ${data.distance_m || "Unknown"} metres<br>
+                    <strong>Estimated Time:</strong> ${data.duration_min || "Unknown"} minutes
+                `;
+
+                if (outdoorSteps.length) {
+                    const firstStep = normaliseStepText(outdoorSteps[0]);
+                    setNavText(firstStep);
+                    speakGuidance(`Route ready. ${firstStep}`, true);
+                    startStepTracking();
+                } else {
+                    setNavText("Route ready");
+                    speakGuidance("Route ready.", true);
+                }
+            } catch (error) {
+                setNavText("Navigation error");
+                setVoiceStatus("Could not start navigation.");
+                speakGuidance("Could not start navigation.", true);
+                currentDestination = "";
+                restartVoiceLoop();
+            }
+        }
+
+        function startStepTracking() {
+            stopTracking();
+
+            trackingWatchId = navigator.geolocation.watchPosition(
+                function(position) {
+                    handleLiveTracking(position);
+                },
+                function() {
+                    setVoiceStatus("Location tracking error.");
+                },
+                {
+                    enableHighAccuracy: true,
+                    maximumAge: 2000,
+                    timeout: 10000
+                }
+            );
+        }
+
+        function handleLiveTracking(position) {
+            if (!outdoorSteps.length) return;
+
+            if (destinationCoords && destinationCoords.lat && destinationCoords.lon) {
+                const destinationDistance = haversineDistanceMeters(
+                    position.coords.latitude,
+                    position.coords.longitude,
+                    destinationCoords.lat,
+                    destinationCoords.lon
+                );
+
+                if (destinationDistance <= DESTINATION_ARRIVAL_THRESHOLD_M) {
+                    setNavText("You have arrived");
+                    speakGuidance("You have arrived at your destination.", true);
+                    stopTracking();
+                    return;
+                }
+            }
+
+            if (currentStepIndex >= outdoorSteps.length) return;
+
+            const currentStep = normaliseStepText(outdoorSteps[currentStepIndex]);
+            setNavText(currentStep);
+        }
+
+        async function startNavigation() {
+            await startBackCamera();
+            setHazardText("No hazard detected", "safe");
+            setVoiceStatus("Voice assistant ready.");
+            speakGuidance("NavGuid is ready. Please say your destination.", true);
+            startVoiceRecognition();
+        }
+
+        window.addEventListener("resize", syncOverlaySize);
+    </script>
 </body>
 </html>
