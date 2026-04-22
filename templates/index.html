@@ -14,6 +14,8 @@
             --text: #ffffff;
             --muted: #d7e3ff;
             --radius: 18px;
+            --safe: #8ce99a;
+            --warning: #ffd43b;
         }
 
         * {
@@ -52,13 +54,30 @@
             margin-bottom: 18px;
         }
 
-        .voice-status {
+        .voice-status,
+        .voice-help {
             background: rgba(255, 255, 255, 0.08);
             border-radius: 16px;
             padding: 16px;
             margin-top: 18px;
             color: var(--muted);
-            line-height: 1.5;
+            line-height: 1.6;
+            text-align: left;
+        }
+
+        .voice-help strong {
+            color: var(--text);
+        }
+
+        .status-pill {
+            display: inline-block;
+            margin-top: 14px;
+            padding: 10px 14px;
+            border-radius: 999px;
+            background: rgba(140, 233, 154, 0.16);
+            color: var(--safe);
+            font-weight: 700;
+            font-size: 0.95rem;
         }
 
         .button,
@@ -82,11 +101,23 @@
             background: var(--accent-hover);
         }
 
+        .secondary-btn {
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .secondary-btn:hover {
+            background: rgba(255, 255, 255, 0.18);
+        }
+
         .support-note {
             margin-top: 20px;
             color: var(--muted);
             font-size: 0.96rem;
             line-height: 1.6;
+        }
+
+        .hidden {
+            display: none;
         }
 
         @media (max-width: 640px) {
@@ -104,21 +135,260 @@
     <div class="container">
         <div class="hero-card">
             <h1>NavGuid</h1>
+
             <div class="subtitle">
                 Voice-first indoor and outdoor navigation for blind and visually impaired users,
                 with live spoken guidance and hazard awareness support.
             </div>
 
-            <div class="voice-status" id="homeVoiceStatus">
-                NavGuid is ready. Tap continue, then say indoor navigation or say take me to your destination.
+            <div class="status-pill" id="homeModeStatus">Voice-first mode ready</div>
+
+            <div class="voice-status" id="homeVoiceStatus" aria-live="polite">
+                NavGuid is ready. Say indoor navigation, or say take me to your destination.
             </div>
 
-            <a class="button" href="{{ url_for('navigation_page') }}">Continue to Navigation</a>
+            <div class="voice-help">
+                <strong>Try saying:</strong><br>
+                “Indoor navigation”<br>
+                “Outdoor navigation”<br>
+                “Take me to Marion Shopping Centre”
+            </div>
+
+            <button id="activateVoiceBtn" onclick="activateHomeVoice()">
+                Start Voice Assistant
+            </button>
+
+            <a class="button secondary-btn" id="continueBtn" href="{{ url_for('navigation_page') }}">
+                Continue to Navigation Screen
+            </a>
 
             <div class="support-note">
-                Voice-first interaction is recommended. The on-screen interface is a supporting fallback only.
+                Voice is the main interaction. The on-screen button is a fallback if browser permissions
+                need a tap before microphone access can begin.
             </div>
         </div>
     </div>
+
+    <script>
+        let homeRecognition = null;
+        let homeRecognitionActive = false;
+        let homeManualStop = false;
+        let preferredVoice = null;
+        let introSpoken = false;
+
+        function initialiseVoices() {
+            if (!("speechSynthesis" in window)) return;
+
+            const voices = speechSynthesis.getVoices();
+            if (!voices.length) return;
+
+            preferredVoice =
+                voices.find(v => v.lang === "en-AU" && /female|samantha|karen|moira/i.test(v.name)) ||
+                voices.find(v => v.lang === "en-AU") ||
+                voices.find(v => v.lang.startsWith("en") && /google|natural|samantha|serena|daniel/i.test(v.name)) ||
+                voices.find(v => v.lang.startsWith("en")) ||
+                voices[0];
+        }
+
+        if ("speechSynthesis" in window) {
+            speechSynthesis.onvoiceschanged = initialiseVoices;
+            initialiseVoices();
+        }
+
+        function splitSpeechIntoChunks(text) {
+            if (!text) return [];
+            return text
+                .replace(/\s+/g, " ")
+                .trim()
+                .split(/(?<=[.!?])\s+/)
+                .filter(Boolean);
+        }
+
+        function speakText(text, priority = false, options = {}) {
+            if (!("speechSynthesis" in window) || !text) return;
+
+            if (priority) {
+                speechSynthesis.cancel();
+            }
+
+            const chunks = splitSpeechIntoChunks(text);
+            if (!chunks.length) return;
+
+            const rate = options.rate ?? 0.92;
+            const pitch = options.pitch ?? 1.0;
+            const pauseMs = options.pauseMs ?? 220;
+
+            function speakChunk(index) {
+                if (index >= chunks.length) return;
+
+                const utterance = new SpeechSynthesisUtterance(chunks[index]);
+                utterance.lang = preferredVoice?.lang || "en-AU";
+                utterance.voice = preferredVoice || null;
+                utterance.rate = rate;
+                utterance.pitch = pitch;
+                utterance.volume = 1;
+
+                utterance.onend = () => {
+                    if (index + 1 < chunks.length) {
+                        setTimeout(() => speakChunk(index + 1), pauseMs);
+                    }
+                };
+
+                speechSynthesis.speak(utterance);
+            }
+
+            speakChunk(0);
+        }
+
+        function setHomeVoiceStatus(text) {
+            document.getElementById("homeVoiceStatus").textContent = text;
+        }
+
+        function setHomeModeStatus(text) {
+            document.getElementById("homeModeStatus").textContent = text;
+        }
+
+        function goToNavigation(params = {}) {
+            const url = new URL("{{ url_for('navigation_page') }}", window.location.origin);
+
+            Object.entries(params).forEach(([key, value]) => {
+                if (value !== undefined && value !== null && value !== "") {
+                    url.searchParams.set(key, value);
+                }
+            });
+
+            window.location.href = url.toString();
+        }
+
+        function startHomeVoiceRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+            if (!SpeechRecognition) {
+                setHomeVoiceStatus("Voice recognition is not supported on this device. Use the navigation button below.");
+                setHomeModeStatus("Voice unavailable");
+                return;
+            }
+
+            if (homeRecognitionActive) return;
+
+            homeRecognition = new SpeechRecognition();
+            homeRecognition.lang = "en-AU";
+            homeRecognition.interimResults = false;
+            homeRecognition.maxAlternatives = 1;
+            homeRecognition.continuous = false;
+
+            homeRecognitionActive = true;
+            homeManualStop = false;
+
+            setHomeVoiceStatus("Listening. Say indoor navigation, outdoor navigation, or say take me to your destination.");
+            setHomeModeStatus("Listening");
+
+            try {
+                homeRecognition.start();
+            } catch (error) {
+                homeRecognitionActive = false;
+                setHomeVoiceStatus("Microphone could not start. Tap Start Voice Assistant and try again.");
+            }
+
+            homeRecognition.onresult = function(event) {
+                const transcript = event.results[0][0].transcript.toLowerCase().trim();
+                setHomeVoiceStatus(`Heard: ${transcript}`);
+
+                if (transcript.includes("indoor navigation")) {
+                    setHomeModeStatus("Indoor navigation selected");
+                    speakText("Indoor navigation selected. Opening navigation screen now.", true);
+                    goToNavigation({
+                        mode: "indoor",
+                        autostart: "1"
+                    });
+                    return;
+                }
+
+                if (transcript.includes("outdoor navigation")) {
+                    setHomeModeStatus("Outdoor navigation selected");
+                    speakText("Outdoor navigation selected. Opening navigation screen now.", true);
+                    goToNavigation({
+                        mode: "outdoor",
+                        autostart: "1"
+                    });
+                    return;
+                }
+
+                if (transcript.startsWith("take me to") || transcript.startsWith("navigate to")) {
+                    const destination = transcript
+                        .replace(/^take me to\s+/i, "")
+                        .replace(/^navigate to\s+/i, "")
+                        .trim();
+
+                    if (!destination) {
+                        setHomeVoiceStatus("I did not hear a destination clearly. Please say it again.");
+                        speakText("I did not hear your destination clearly. Please say it again.", true);
+                        restartHomeVoiceLoop();
+                        return;
+                    }
+
+                    setHomeModeStatus("Outdoor destination selected");
+                    speakText(`Opening outdoor navigation to ${destination}.`, true);
+                    goToNavigation({
+                        mode: "outdoor",
+                        destination: destination,
+                        autostart: "1"
+                    });
+                    return;
+                }
+
+                speakText("Please say indoor navigation, outdoor navigation, or say take me to your destination.", true);
+                restartHomeVoiceLoop();
+            };
+
+            homeRecognition.onerror = function() {
+                homeRecognitionActive = false;
+                if (!homeManualStop) {
+                    setHomeVoiceStatus("Voice input failed. Tap Start Voice Assistant and try again.");
+                    setHomeModeStatus("Listening error");
+                }
+            };
+
+            homeRecognition.onend = function() {
+                homeRecognitionActive = false;
+                if (!homeManualStop) {
+                    setHomeModeStatus("Ready");
+                }
+            };
+        }
+
+        function restartHomeVoiceLoop() {
+            setTimeout(() => {
+                if (!homeManualStop && !homeRecognitionActive) {
+                    startHomeVoiceRecognition();
+                }
+            }, 900);
+        }
+
+        function activateHomeVoice() {
+            if (!introSpoken) {
+                introSpoken = true;
+                speakText(
+                    "NavGuid is ready. Say indoor navigation, outdoor navigation, or say take me to your destination.",
+                    true
+                );
+            }
+            startHomeVoiceRecognition();
+        }
+
+        window.addEventListener("load", function() {
+            setHomeModeStatus("Ready");
+
+            setTimeout(() => {
+                if (!introSpoken) {
+                    introSpoken = true;
+                    speakText(
+                        "NavGuid is ready. Say indoor navigation, outdoor navigation, or say take me to your destination.",
+                        true
+                    );
+                }
+            }, 400);
+        });
+    </script>
 </body>
 </html>

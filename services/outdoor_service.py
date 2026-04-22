@@ -27,50 +27,61 @@ def search_destination(destination_query):
     }
 
 
+def _clean_street_name(street_name):
+    return (street_name or "").strip()
+
+
+def _round_distance(step):
+    return max(0, round(step.get("distance", 0)))
+
+
 def _build_spoken_instruction(step):
     maneuver = step.get("maneuver", {})
     maneuver_type = maneuver.get("type", "continue")
-    modifier = maneuver.get("modifier", "")
-    street_name = step.get("name", "").strip()
-    distance = round(step.get("distance", 0))
+    modifier = (maneuver.get("modifier", "") or "").replace("_", " ").strip()
+    street_name = _clean_street_name(step.get("name", ""))
+    distance = _round_distance(step)
 
     if maneuver_type == "depart":
         if street_name:
-            return f"Start walking on {street_name} for {distance} metres."
-        return f"Start walking straight for {distance} metres."
+            return f"Start walking straight on {street_name}."
+        return "Start walking straight."
 
     if maneuver_type == "continue":
         if street_name:
-            return f"Continue straight on {street_name} for {distance} metres."
-        return f"Continue straight for {distance} metres."
+            return f"Walk straight on {street_name} for about {distance} metres."
+        return f"Walk straight for about {distance} metres."
 
     if maneuver_type == "turn":
         if modifier and street_name:
-            return f"Turn {modifier} onto {street_name} in {distance} metres."
+            return f"In about {distance} metres, turn {modifier} onto {street_name}."
         if modifier:
-            return f"Turn {modifier} in {distance} metres."
-        return f"Turn ahead in {distance} metres."
+            return f"In about {distance} metres, turn {modifier}."
+        return f"Turn ahead in about {distance} metres."
 
     if maneuver_type == "fork":
         if modifier:
-            return f"Keep {modifier} in {distance} metres."
-        return f"Keep ahead in {distance} metres."
+            return f"In about {distance} metres, keep {modifier}."
+        return f"Keep ahead in about {distance} metres."
 
     if maneuver_type == "merge":
         if modifier:
-            return f"Merge {modifier} in {distance} metres."
-        return f"Merge ahead in {distance} metres."
+            return f"In about {distance} metres, merge {modifier}."
+        return f"Merge ahead in about {distance} metres."
 
     if maneuver_type == "roundabout":
-        return f"Approach the roundabout in {distance} metres."
+        exit_number = maneuver.get("exit")
+        if exit_number:
+            return f"Approach the roundabout in about {distance} metres and take exit {exit_number}."
+        return f"Approach the roundabout in about {distance} metres."
 
     if maneuver_type == "arrive":
         return "You have arrived at your destination."
 
     if street_name:
-        return f"{maneuver_type.replace('_', ' ').title()} on {street_name} for {distance} metres."
+        return f"{maneuver_type.replace('_', ' ').title()} on {street_name} for about {distance} metres."
 
-    return f"{maneuver_type.replace('_', ' ').title()} for {distance} metres."
+    return f"{maneuver_type.replace('_', ' ').title()} for about {distance} metres."
 
 
 def build_osrm_steps_and_data(route_data):
@@ -91,16 +102,22 @@ def build_osrm_steps_and_data(route_data):
             location = maneuver.get("location", [])
             spoken_instruction = _build_spoken_instruction(step)
 
+            lat = float(location[1]) if len(location) == 2 else None
+            lon = float(location[0]) if len(location) == 2 else None
+
             steps_output.append(spoken_instruction)
 
             step_data.append({
                 "instruction": spoken_instruction,
-                "lat": float(location[1]) if len(location) == 2 else None,
-                "lon": float(location[0]) if len(location) == 2 else None,
+                "lat": lat,
+                "lon": lon,
                 "maneuver_type": maneuver.get("type", "continue"),
                 "modifier": maneuver.get("modifier", ""),
-                "street_name": step.get("name", "").strip(),
-                "distance_m": round(step.get("distance", 0))
+                "street_name": _clean_street_name(step.get("name", "")),
+                "distance_m": _round_distance(step),
+                "duration_s": round(step.get("duration", 0)),
+                "bearing_before": maneuver.get("bearing_before"),
+                "bearing_after": maneuver.get("bearing_after")
             })
 
     if steps_output:
@@ -112,7 +129,10 @@ def build_osrm_steps_and_data(route_data):
             "maneuver_type": "arrive",
             "modifier": "",
             "street_name": "",
-            "distance_m": 0
+            "distance_m": 0,
+            "duration_s": 0,
+            "bearing_before": None,
+            "bearing_after": None
         })
 
     return steps_output, step_data

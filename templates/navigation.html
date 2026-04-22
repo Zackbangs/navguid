@@ -182,6 +182,7 @@
         .small {
             font-size: 0.95rem;
             color: var(--muted);
+            line-height: 1.6;
         }
 
         .hidden {
@@ -217,8 +218,8 @@
 
         <div class="voice-card">
             <div class="voice-title">Voice assistant</div>
-            <div id="voiceStatus" class="small">
-                Tap Start Navigation, then say indoor navigation, outdoor navigation, or say take me to your destination.
+            <div id="voiceStatus" class="small" aria-live="polite">
+                NavGuid is ready. Say indoor navigation, or say take me to your destination.
             </div>
         </div>
 
@@ -246,6 +247,10 @@
 
         <div class="indoor-panel hidden" id="indoorPanel">
             <strong>Indoor navigation</strong><br>
+            <div class="small" style="margin-top: 10px; margin-bottom: 12px;">
+                Voice is primary. This panel remains available as a fallback for route selection.
+            </div>
+
             <label for="buildingSelect">Building</label>
             <select id="buildingSelect">
                 <option value="torrens">Torrens</option>
@@ -275,10 +280,11 @@
         </div>
 
         <div class="controls">
-            <button id="startBtn" onclick="startNavigation()">Start Navigation</button>
+            <button id="startBtn" onclick="startNavigation()">Start Voice Navigation</button>
             <button class="secondary" onclick="startHazardMonitoring()">Start Hazard Monitoring</button>
             <button class="secondary" onclick="stopHazardMonitoring()">Stop Hazard Monitoring</button>
             <button class="secondary" onclick="repeatCurrentInstruction()">Repeat Current Instruction</button>
+            <button class="secondary" onclick="resetVoiceAssistant()">Reset Voice Assistant</button>
             <button class="secondary" onclick="stopAll()">Stop Everything</button>
         </div>
     </div>
@@ -301,19 +307,22 @@
         let trackingWatchId = null;
         let destinationCoords = null;
         let arrivedAnnounced = false;
+        let routeActive = false;
+        let introHasRun = false;
 
         let preferredVoice = null;
         let lastHazardSpeech = "";
         let lastHazardSpeechTime = 0;
         let lastGuidanceSpeechKey = "";
         let lastGuidanceSpeechTime = 0;
+        let lastKnownPosition = null;
 
         const HAZARD_COOLDOWN_MS = 3500;
         const DESTINATION_ARRIVAL_THRESHOLD_M = 14;
         const STEP_REACHED_THRESHOLD_M = 18;
-        const APPROACH_DISTANCE_M = 22;
-        const NOW_TURN_DISTANCE_M = 8;
-        const GUIDANCE_COOLDOWN_MS = 5000;
+        const APPROACH_DISTANCE_M = 26;
+        const NOW_TURN_DISTANCE_M = 10;
+        const GUIDANCE_COOLDOWN_MS = 4500;
 
         function initialiseVoices() {
             if (!("speechSynthesis" in window)) return;
@@ -420,14 +429,29 @@
         }
 
         function normaliseStepText(step) {
-            if (!step) return "Continue straight.";
+            if (!step) return "Walk straight.";
 
             return step
                 .replace(/slight right/gi, "slightly right")
                 .replace(/slight left/gi, "slightly left")
+                .replace(/continue straight/gi, "walk straight")
                 .replace(/continue/gi, "walk straight")
-                .replace(/onto/gi, "onto")
-                .replace(/metres/gi, "meters");
+                .replace(/metres/gi, "meters")
+                .replace(/\s+/g, " ")
+                .trim();
+        }
+
+        function getUrlParams() {
+            return new URLSearchParams(window.location.search);
+        }
+
+        function getAutoStartConfig() {
+            const params = getUrlParams();
+            return {
+                autostart: params.get("autostart") === "1",
+                mode: (params.get("mode") || "").trim().toLowerCase(),
+                destination: (params.get("destination") || "").trim()
+            };
         }
 
         function getCurrentLocationPromise() {
@@ -671,7 +695,13 @@
             manualStop = false;
             setVoiceStatus("Listening for indoor navigation, outdoor navigation, or your destination.");
 
-            recognition.start();
+            try {
+                recognition.start();
+            } catch (error) {
+                recognitionActive = false;
+                setVoiceStatus("Microphone could not start. Tap Start Voice Navigation and try again.");
+                return;
+            }
 
             recognition.onresult = async function(event) {
                 const transcript = event.results[0][0].transcript.toLowerCase().trim();
@@ -682,23 +712,18 @@
                     return;
                 }
 
+                if (transcript.includes("reset voice assistant")) {
+                    resetVoiceAssistant();
+                    return;
+                }
+
                 if (transcript.includes("indoor navigation")) {
-                    currentMode = "indoor";
-                    setModeText("Indoor navigation");
-                    setNavText("Indoor mode ready. Choose your current location and destination, then start indoor route.");
-                    showIndoorPanel();
-                    hideRouteSummary();
-                    speakGuidance("Indoor navigation selected. Choose your current location and destination, then start indoor route.", true);
+                    activateIndoorMode(true);
                     return;
                 }
 
                 if (transcript.includes("outdoor navigation")) {
-                    currentMode = "outdoor";
-                    setModeText("Outdoor navigation");
-                    hideIndoorPanel();
-                    setNavText("Outdoor mode ready. Say take me to your destination.");
-                    speakGuidance("Outdoor navigation selected. Say take me to your destination.", true);
-                    restartVoiceLoop();
+                    activateOutdoorMode(true);
                     return;
                 }
 
@@ -733,7 +758,7 @@
 
             recognition.onerror = function() {
                 recognitionActive = false;
-                if (!manualStop) {
+                if (!manualStop && !routeActive) {
                     setVoiceStatus("Voice input failed. Listening again.");
                     restartVoiceLoop();
                 }
@@ -741,7 +766,7 @@
 
             recognition.onend = function() {
                 recognitionActive = false;
-                if (!manualStop && !currentDestination) {
+                if (!manualStop && !routeActive) {
                     restartVoiceLoop();
                 }
             };
@@ -749,7 +774,7 @@
 
         function restartVoiceLoop() {
             setTimeout(() => {
-                if (!manualStop && !recognitionActive && (!currentDestination || currentMode !== "outdoor")) {
+                if (!manualStop && !recognitionActive && !routeActive) {
                     startVoiceRecognition();
                 }
             }, 1000);
@@ -773,11 +798,9 @@
             }
         }
 
-        function stopAll() {
+        function resetVoiceAssistant() {
             stopVoiceRecognition();
-            stopTracking();
-            stopHazardMonitoring();
-            stopCamera();
+            routeActive = false;
             currentMode = "";
             currentDestination = "";
             outdoorSteps = [];
@@ -785,6 +808,30 @@
             currentStepIndex = 0;
             destinationCoords = null;
             arrivedAnnounced = false;
+            hideRouteSummary();
+            hideIndoorPanel();
+            setModeText("Waiting for voice command");
+            setNavText("Say indoor navigation or say take me to your destination");
+            setVoiceStatus("Voice assistant reset. Listening again.");
+            speechSynthesis.cancel();
+            manualStop = false;
+            restartVoiceLoop();
+        }
+
+        function stopAll() {
+            stopVoiceRecognition();
+            stopTracking();
+            stopHazardMonitoring();
+            stopCamera();
+            routeActive = false;
+            currentMode = "";
+            currentDestination = "";
+            outdoorSteps = [];
+            outdoorStepData = [];
+            currentStepIndex = 0;
+            destinationCoords = null;
+            arrivedAnnounced = false;
+            lastKnownPosition = null;
             setVoiceStatus("Stopped.");
             setModeText("Waiting for voice command");
             setNavText("Say indoor navigation or say take me to your destination");
@@ -821,6 +868,14 @@
             return haversineDistanceMeters(userLat, userLon, step.lat, step.lon);
         }
 
+        function getDestinationDistanceFromUser(userLat, userLon) {
+            if (!destinationCoords || destinationCoords.lat == null || destinationCoords.lon == null) {
+                return Infinity;
+            }
+
+            return haversineDistanceMeters(userLat, userLon, destinationCoords.lat, destinationCoords.lon);
+        }
+
         function findBestCurrentStepIndex(userLat, userLon) {
             if (!outdoorStepData.length) return currentStepIndex;
 
@@ -828,7 +883,7 @@
             let bestDistance = Infinity;
 
             const searchStart = Math.max(0, currentStepIndex);
-            const searchEnd = Math.min(outdoorStepData.length - 1, currentStepIndex + 3);
+            const searchEnd = Math.min(outdoorStepData.length - 1, currentStepIndex + 4);
 
             for (let i = searchStart; i <= searchEnd; i++) {
                 const step = outdoorStepData[i];
@@ -844,8 +899,8 @@
             return bestIndex;
         }
 
-        function buildLiveInstruction(step, distanceToStep) {
-            if (!step) return "Continue straight.";
+        function buildLiveInstruction(step, distanceToStep, destinationDistance = null) {
+            if (!step) return "Walk straight.";
 
             if (step.maneuver_type === "arrive") {
                 return "You have arrived at your destination.";
@@ -853,6 +908,10 @@
 
             const modifier = (step.modifier || "").replaceAll("_", " ").trim().toLowerCase();
             const street = (step.street_name || "").trim();
+
+            if (destinationDistance !== null && destinationDistance <= DESTINATION_ARRIVAL_THRESHOLD_M + 8) {
+                return "You are very close. You have almost arrived.";
+            }
 
             if (distanceToStep <= NOW_TURN_DISTANCE_M) {
                 if (step.maneuver_type === "turn" && modifier) {
@@ -869,12 +928,20 @@
                     return `Merge ${modifier} now.`;
                 }
 
+                if (step.maneuver_type === "depart") {
+                    return street
+                        ? `Start walking straight on ${street}.`
+                        : `Start walking straight.`;
+                }
+
                 return normaliseStepText(step.instruction);
             }
 
             if (distanceToStep <= APPROACH_DISTANCE_M) {
                 if (step.maneuver_type === "turn" && modifier) {
-                    return `In ${Math.round(distanceToStep)} meters, turn ${modifier}.`;
+                    return street
+                        ? `In ${Math.round(distanceToStep)} meters, turn ${modifier} onto ${street}.`
+                        : `In ${Math.round(distanceToStep)} meters, turn ${modifier}.`;
                 }
 
                 if (step.maneuver_type === "fork" && modifier) {
@@ -885,7 +952,25 @@
                     return `In ${Math.round(distanceToStep)} meters, merge ${modifier}.`;
                 }
 
+                if (step.maneuver_type === "depart") {
+                    return street
+                        ? `Walk straight on ${street}.`
+                        : `Walk straight.`;
+                }
+
                 return `In ${Math.round(distanceToStep)} meters, ${normaliseStepText(step.instruction)}`;
+            }
+
+            if (step.maneuver_type === "depart") {
+                return street
+                    ? `Walk straight on ${street}.`
+                    : "Walk straight.";
+            }
+
+            if (step.maneuver_type === "continue") {
+                return street
+                    ? `Walk straight on ${street}.`
+                    : "Walk straight.";
             }
 
             return "Walk straight.";
@@ -914,10 +999,42 @@
             return false;
         }
 
+        function activateIndoorMode(announce = false) {
+            currentMode = "indoor";
+            routeActive = false;
+            currentDestination = "";
+            stopTracking();
+            hideRouteSummary();
+            showIndoorPanel();
+            setModeText("Indoor navigation");
+            setNavText("Indoor mode ready. Choose your current location and destination, then start indoor route.");
+            setVoiceStatus("Indoor navigation selected.");
+            if (announce) {
+                speakGuidance("Indoor navigation selected. Choose your current location and destination, then start indoor route.", true);
+            }
+        }
+
+        function activateOutdoorMode(announce = false) {
+            currentMode = "outdoor";
+            routeActive = false;
+            hideIndoorPanel();
+            setModeText("Outdoor navigation");
+            setNavText("Outdoor mode ready. Say take me to your destination.");
+            setVoiceStatus("Outdoor navigation selected. Say take me to your destination.");
+            if (announce) {
+                speakGuidance("Outdoor navigation selected. Say take me to your destination.", true);
+            }
+            restartVoiceLoop();
+        }
+
         async function startOutdoorNavigation() {
             try {
+                routeActive = true;
                 setNavText("Getting route...");
+                setVoiceStatus(`Getting route to ${currentDestination}.`);
                 speakGuidance(`Getting route to ${currentDestination}.`, true);
+
+                await startHazardMonitoring();
 
                 const position = await getCurrentLocationPromise();
 
@@ -934,6 +1051,7 @@
                 const data = await response.json();
 
                 if (!data.success) {
+                    routeActive = false;
                     setNavText("Could not get route");
                     setVoiceStatus(data.message || "Route error");
                     speakGuidance(data.message || "I could not get the route.", true);
@@ -957,13 +1075,16 @@
                 if (outdoorSteps.length) {
                     const firstStep = normaliseStepText(outdoorSteps[0]);
                     setNavText(firstStep);
+                    setVoiceStatus(`Outdoor route ready to ${data.destination_name || currentDestination}.`);
                     speakGuidance(`Route ready. ${firstStep}`, true);
                     startStepTracking();
                 } else {
+                    routeActive = false;
                     setNavText("Route ready");
                     speakGuidance("Route ready.", true);
                 }
             } catch (error) {
+                routeActive = false;
                 setNavText("Navigation error");
                 setVoiceStatus("Could not start navigation.");
                 speakGuidance("Could not start navigation.", true);
@@ -978,6 +1099,7 @@
             const destination = document.getElementById("indoorDestination").value;
 
             try {
+                routeActive = true;
                 setNavText("Building indoor route...");
                 setModeText("Indoor navigation");
                 speakGuidance("Building indoor route.", true);
@@ -995,6 +1117,7 @@
                 const data = await response.json();
 
                 if (!data.success) {
+                    routeActive = false;
                     setNavText(data.message || "Indoor route failed.");
                     speakGuidance(data.message || "Indoor route failed.", true);
                     return;
@@ -1012,6 +1135,7 @@
                     speakGuidance("Indoor route ready.", true);
                 }
             } catch (error) {
+                routeActive = false;
                 setNavText("Indoor navigation error");
                 speakGuidance("Indoor navigation error.", true);
             }
@@ -1040,24 +1164,22 @@
 
             const userLat = position.coords.latitude;
             const userLon = position.coords.longitude;
+            lastKnownPosition = { lat: userLat, lon: userLon };
 
-            if (destinationCoords && destinationCoords.lat && destinationCoords.lon) {
-                const destinationDistance = haversineDistanceMeters(
-                    userLat,
-                    userLon,
-                    destinationCoords.lat,
-                    destinationCoords.lon
-                );
+            const destinationDistance = getDestinationDistanceFromUser(userLat, userLon);
 
-                if (destinationDistance <= DESTINATION_ARRIVAL_THRESHOLD_M) {
-                    if (!arrivedAnnounced) {
-                        arrivedAnnounced = true;
-                        setNavText("You have arrived");
-                        speakGuidance("You have arrived at your destination.", true);
-                    }
-                    stopTracking();
-                    return;
+            if (destinationDistance <= DESTINATION_ARRIVAL_THRESHOLD_M) {
+                if (!arrivedAnnounced) {
+                    arrivedAnnounced = true;
+                    routeActive = false;
+                    setModeText("Arrival reached");
+                    setNavText("You have arrived");
+                    setVoiceStatus("You have arrived at your destination.");
+                    speakGuidance("You have arrived at your destination.", true);
                 }
+                stopTracking();
+                restartVoiceLoop();
+                return;
             }
 
             const bestIndex = findBestCurrentStepIndex(userLat, userLon);
@@ -1069,11 +1191,11 @@
             if (!currentStep) return;
 
             const distanceToStep = getStepDistanceFromUser(userLat, userLon, currentStepIndex);
-            const liveInstruction = buildLiveInstruction(currentStep, distanceToStep);
+            const liveInstruction = buildLiveInstruction(currentStep, distanceToStep, destinationDistance);
 
             setNavText(liveInstruction);
 
-            const speechKey = `${currentStepIndex}|${Math.round(distanceToStep / 4)}|${liveInstruction}`;
+            const speechKey = `${currentStepIndex}|${Math.round(distanceToStep / 4)}|${Math.round(destinationDistance / 5)}|${liveInstruction}`;
 
             if (distanceToStep <= STEP_REACHED_THRESHOLD_M && currentStepIndex < outdoorStepData.length - 1) {
                 currentStepIndex += 1;
@@ -1081,7 +1203,7 @@
                 const nextStep = outdoorStepData[currentStepIndex];
                 if (nextStep) {
                     const nextDistance = getStepDistanceFromUser(userLat, userLon, currentStepIndex);
-                    const nextInstruction = buildLiveInstruction(nextStep, nextDistance);
+                    const nextInstruction = buildLiveInstruction(nextStep, nextDistance, destinationDistance);
                     setNavText(nextInstruction);
 
                     const nextKey = `next|${currentStepIndex}|${Math.round(nextDistance / 4)}|${nextInstruction}`;
@@ -1117,7 +1239,60 @@
             startVoiceRecognition();
         }
 
+        function runIncomingVoiceFlowFromUrl() {
+            const config = getAutoStartConfig();
+
+            if (!config.autostart) {
+                return;
+            }
+
+            if (config.mode === "indoor") {
+                activateIndoorMode(false);
+                setVoiceStatus("Indoor navigation ready.");
+                setNavText("Indoor mode ready. Choose your current location and destination, then start indoor route.");
+                speakGuidance("Indoor navigation is ready.", true);
+                return;
+            }
+
+            if (config.mode === "outdoor" && config.destination) {
+                currentMode = "outdoor";
+                currentDestination = config.destination;
+                setModeText("Outdoor navigation");
+                hideIndoorPanel();
+                setVoiceStatus(`Starting outdoor navigation to ${config.destination}.`);
+                startOutdoorNavigation();
+                return;
+            }
+
+            if (config.mode === "outdoor") {
+                activateOutdoorMode(false);
+                speakGuidance("Outdoor navigation is ready. Say take me to your destination.", true);
+            }
+        }
+
         window.addEventListener("resize", syncOverlaySize);
+
+        window.addEventListener("load", function() {
+            if (introHasRun) return;
+            introHasRun = true;
+
+            const config = getAutoStartConfig();
+
+            if (config.autostart) {
+                startNavigation().then(() => {
+                    setTimeout(() => {
+                        runIncomingVoiceFlowFromUrl();
+                    }, 650);
+                });
+            } else {
+                setTimeout(() => {
+                    speakGuidance(
+                        "NavGuid is ready. Say indoor navigation, outdoor navigation, or say take me to your destination.",
+                        true
+                    );
+                }, 500);
+            }
+        });
     </script>
 </body>
 </html>
