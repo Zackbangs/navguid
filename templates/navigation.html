@@ -1,1391 +1,188 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NavGuid - Navigation</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <style>
-        .hazard-visual-wrap {
-            position: relative;
-            width: 100%;
-            max-width: 100%;
-            border-radius: 16px;
-            overflow: hidden;
-            background: #111;
-            margin-top: 12px;
-        }
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NavGuid</title>
 
-        .camera-feed {
-            display: block;
-            width: 100%;
-            height: auto;
-            border-radius: 16px;
-            background: #111;
-        }
+<style>
+body {
+    margin: 0;
+    font-family: Arial;
+    background: #0b1f3a;
+    color: white;
+    text-align: center;
+}
 
-        .overlay-canvas {
-            position: absolute;
-            inset: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-        }
-    </style>
+.container {
+    padding: 20px;
+}
+
+.big-text {
+    font-size: 22px;
+    margin: 15px 0;
+}
+
+.status {
+    font-size: 26px;
+    font-weight: bold;
+    margin-top: 20px;
+}
+
+.hazard {
+    font-size: 22px;
+    margin-top: 10px;
+    color: #ffcc00;
+}
+
+button {
+    width: 90%;
+    padding: 18px;
+    font-size: 20px;
+    margin-top: 20px;
+    border-radius: 12px;
+    border: none;
+    background: #2d6cdf;
+    color: white;
+}
+
+video {
+    width: 100%;
+    border-radius: 15px;
+    margin-top: 15px;
+}
+</style>
 </head>
+
 <body>
-    <div class="container">
-        <div class="nav-hero compact-hero">
-            <h1>NavGuid</h1>
-            <p>
-                Voice-first assistive navigation with live route guidance and real-time hazard detection.
-            </p>
-        </div>
 
-        <div class="safety-banner">
-            This app provides navigation assistance only. Please continue using your cane, guide support,
-            and safe crossing judgment at all times.
-        </div>
+<div class="container">
 
-        <div class="voice-box primary-voice-box">
-            <div class="section-title">
-                <h2>🎤 Voice Assistant</h2>
-                <span class="status-pill" id="voiceModePill">Starting...</span>
-            </div>
-            <div class="voice-status-card">
-                <div class="voice-status-label">Voice status</div>
-                <div id="voiceStatus" class="voice-status-text">NavGuid is getting ready.</div>
-            </div>
-            <p class="hint-text compact-hint">
-                Say things like: “Take me to Rundle Mall”, “What is my next step?”, “How far is the destination?” or “Stop listening”.
-            </p>
-        </div>
+    <h2>NavGuid Live Navigation</h2>
 
-        <div class="section-card compact-card">
-            <div class="section-title">
-                <h2>🧭 Destination</h2>
-                <span class="status-pill">Voice first</span>
-            </div>
-            <p class="section-subtitle">
-                NavGuid will try to get your location automatically. You can also type a destination as a fallback.
-            </p>
+    <!-- CAMERA -->
+    <video id="camera" autoplay playsinline></video>
 
-            <div class="grid-two">
-                <div>
-                    <label for="currentLat">Current Latitude</label>
-                    <input type="text" id="currentLat" placeholder="Latitude" readonly>
-                </div>
-
-                <div>
-                    <label for="currentLon">Current Longitude</label>
-                    <input type="text" id="currentLon" placeholder="Longitude" readonly>
-                </div>
-            </div>
-
-            <label for="outdoorDestination">Destination</label>
-            <input
-                type="text"
-                id="outdoorDestination"
-                placeholder="Enter destination e.g. Adelaide Railway Station"
-            >
-
-            <div class="button-group compact-button-group">
-                <button type="button" onclick="startOutdoorNavigation()">Start Navigation</button>
-                <button type="button" onclick="stopNavigation()">Stop Navigation</button>
-            </div>
-
-            <div id="outdoorResult" class="result-box compact-result"></div>
-        </div>
-
-        <div class="step-box primary-step-box">
-            <div class="section-title">
-                <h2>🚶 Current Step</h2>
-                <span class="status-pill">Live guidance</span>
-            </div>
-
-            <div class="current-step-card large-step-card">
-                <div id="stepCounter" class="step-counter">No route loaded yet.</div>
-                <div id="currentStepText" class="current-step-text">
-                    Waiting for route instructions...
-                </div>
-            </div>
-        </div>
-
-        <div class="live-nav-box compact-card">
-            <div class="section-title">
-                <h3>📍 Live Navigation</h3>
-                <span class="status-pill">Real-time status</span>
-            </div>
-            <p id="liveNavStatus">Live GPS tracking is not active.</p>
-
-            <div class="nav-stats-grid compact-stats-grid">
-                <div class="nav-stat-card">
-                    <div class="nav-stat-label">GPS Accuracy</div>
-                    <div class="nav-stat-value" id="gpsAccuracyValue">Unknown</div>
-                </div>
-                <div class="nav-stat-card">
-                    <div class="nav-stat-label">Next Turn</div>
-                    <div class="nav-stat-value" id="nextTurnDistanceValue">Unknown</div>
-                </div>
-                <div class="nav-stat-card">
-                    <div class="nav-stat-label">Destination</div>
-                    <div class="nav-stat-value" id="destinationDistanceValue">Unknown</div>
-                </div>
-                <div class="nav-stat-card">
-                    <div class="nav-stat-label">Tracking</div>
-                    <div class="nav-stat-value" id="trackingStateValue">Off</div>
-                </div>
-            </div>
-
-            <div class="assistive-actions">
-                <button type="button" class="secondary-action" onclick="repeatStep()">Repeat Current Step</button>
-                <button type="button" class="secondary-action" onclick="stopAllVoiceAssistantListening(true)">Stop Listening</button>
-            </div>
-
-            <div class="hidden-status-pills">
-                <span class="live-nav-pill" id="gpsAccuracyPill">GPS Accuracy: unknown</span>
-                <span class="live-nav-pill" id="nextTurnDistancePill">Next Turn: unknown</span>
-                <span class="live-nav-pill" id="destinationDistancePill">Destination: unknown</span>
-                <span class="live-nav-pill" id="trackingStatePill">Tracking: off</span>
-            </div>
-        </div>
-
-        <div class="hazard-box clean-hazard-box compact-card">
-            <div class="section-title">
-                <h3>⚠️ Hazard Detection</h3>
-                <span class="status-pill">Camera safety</span>
-            </div>
-
-            <div id="hazardBanner" class="hazard-banner hazard-banner-neutral">
-                <div class="hazard-banner-title">Camera status</div>
-                <div id="hazardStatus">No hazard detected.</div>
-            </div>
-
-            <div class="button-group compact-button-group">
-                <button type="button" onclick="startHazardMonitoring()">Start Hazard Monitoring</button>
-                <button type="button" onclick="stopHazardMonitoring()">Stop Hazard Monitoring</button>
-            </div>
-
-            <div class="hazard-visual-wrap" id="hazardVisualWrap">
-                <video id="cameraFeed" autoplay playsinline muted class="camera-feed"></video>
-                <canvas id="overlayCanvas" class="overlay-canvas"></canvas>
-            </div>
-
-            <div id="hazardMetaPanel" class="hazard-meta-panel hidden">
-                <div class="hazard-meta-row">
-                    <span class="hazard-pill" id="hazardTypePill">Type: none</span>
-                    <span class="hazard-pill" id="hazardDistancePill">Distance: none</span>
-                    <span class="hazard-pill" id="hazardDirectionPill">Direction: none</span>
-                    <span class="hazard-pill" id="hazardSeverityPill">Severity: none</span>
-                </div>
-            </div>
-
-            <canvas id="captureCanvas" style="display:none;"></canvas>
-        </div>
-
-        <a class="back-link" href="{{ url_for('home') }}">← Back to Home</a>
+    <!-- NAVIGATION STATUS -->
+    <div class="status" id="navText">
+        Say your destination
     </div>
 
-    <script>
-        let outdoorSteps = [];
-        let outdoorStepData = [];
-        let currentStepIndex = 0;
-        let currentRouteDestination = null;
-        let routeGeometry = [];
+    <!-- HAZARD ALERT -->
+    <div class="hazard" id="hazardText">
+        No hazard detected
+    </div>
 
-        let cameraStream = null;
-        let monitoringInterval = null;
-        let monitoringActive = false;
-        let detectionInProgress = false;
-        let lastSpokenHazard = "";
-        let lastHazardTime = 0;
-        let lastHazardType = "";
-        let lastHazardSeverity = "";
-        let navigationStarted = false;
+    <!-- CONTROL -->
+    <button onclick="startNavigation()">Start Navigation</button>
 
-        let liveTrackingWatchId = null;
-        let liveTrackingActive = false;
-        let lastLiveInstructionKey = "";
-        let lastLiveInstructionTime = 0;
-        let lastAnnouncedStepIndex = -1;
-        let hasArrivalBeenAnnounced = false;
+</div>
 
-        let voiceRecognition = null;
-        let voiceRecognitionActive = false;
-        let continuousVoiceMode = false;
-        let restartVoiceAfterCommand = false;
-        let manualVoiceStop = false;
-        let voiceRestartTimeout = null;
-        let initialVoiceGreetingDone = false;
+<script>
+let recognition;
+let destination = "";
+let currentStep = 0;
+let steps = [];
 
-        const HAZARD_COOLDOWN_MS = 3500;
-        const HAZARD_CAPTURE_INTERVAL_MS = 700;
+function speak(text) {
+    const msg = new SpeechSynthesisUtterance(text);
+    msg.rate = 0.9;
+    msg.pitch = 1;
+    speechSynthesis.speak(msg);
+}
 
-        const DESTINATION_ARRIVAL_THRESHOLD_M = 12;
-        const STEP_REACHED_THRESHOLD_M = 16;
-        const APPROACH_WARNING_DISTANCE_M = 20;
-        const NOW_TURN_DISTANCE_M = 9;
-        const LIVE_GUIDANCE_COOLDOWN_MS = 6000;
+function startNavigation() {
+    startVoice();
+    startCamera();
+}
 
-        function setHazardBannerState(type, message) {
-            const banner = document.getElementById("hazardBanner");
-            const status = document.getElementById("hazardStatus");
+function startVoice() {
+    recognition = new webkitSpeechRecognition();
+    recognition.continuous = true;
 
-            banner.classList.remove(
-                "hazard-banner-neutral",
-                "hazard-banner-safe",
-                "hazard-banner-warning",
-                "hazard-banner-urgent"
-            );
+    recognition.onresult = (event) => {
+        let transcript = event.results[event.results.length - 1][0].transcript;
 
-            if (type === "urgent") {
-                banner.classList.add("hazard-banner-urgent");
-            } else if (type === "warning") {
-                banner.classList.add("hazard-banner-warning");
-            } else if (type === "safe") {
-                banner.classList.add("hazard-banner-safe");
-            } else {
-                banner.classList.add("hazard-banner-neutral");
-            }
-
-            status.textContent = message;
+        if (!destination) {
+            destination = transcript;
+            document.getElementById("navText").innerText = "Getting route...";
+            speak("Getting route to " + destination);
+            getRoute(destination);
         }
-
-        function showHazardMetaPanel(show = true) {
-            const panel = document.getElementById("hazardMetaPanel");
-            if (show) {
-                panel.classList.remove("hidden");
-            } else {
-                panel.classList.add("hidden");
-            }
-        }
-
-        function speakText(text, priority = false) {
-            if (!("speechSynthesis" in window)) {
-                return;
-            }
-
-            if (priority) {
-                window.speechSynthesis.cancel();
-            }
-
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.rate = 0.92;
-            utterance.pitch = 1;
-            utterance.volume = 1;
-            window.speechSynthesis.speak(utterance);
-        }
-
-        function stopVoice() {
-            if ("speechSynthesis" in window) {
-                window.speechSynthesis.cancel();
-            }
-        }
-
-        function stopAllVoiceAssistantListening(announce = true) {
-            manualVoiceStop = true;
-            continuousVoiceMode = false;
-            restartVoiceAfterCommand = false;
-
-            if (voiceRestartTimeout) {
-                clearTimeout(voiceRestartTimeout);
-                voiceRestartTimeout = null;
-            }
-
-            if (voiceRecognition) {
-                try {
-                    voiceRecognition.stop();
-                } catch (error) {
-                }
-            }
-
-            voiceRecognitionActive = false;
-            updateVoiceModeUI();
-
-            if (announce) {
-                document.getElementById("voiceStatus").textContent = "Voice assistant stopped listening.";
-                speakText("Voice assistant stopped listening.", true);
-            }
-        }
-
-        function updateVoiceModeUI() {
-            const modePill = document.getElementById("voiceModePill");
-
-            if (continuousVoiceMode) {
-                modePill.textContent = "Listening";
-            } else {
-                modePill.textContent = "Stopped";
-            }
-        }
-
-        function scheduleVoiceRestart(delayMs = 900) {
-            if (!continuousVoiceMode) return;
-            if (manualVoiceStop) return;
-
-            if (voiceRestartTimeout) {
-                clearTimeout(voiceRestartTimeout);
-            }
-
-            voiceRestartTimeout = setTimeout(() => {
-                if (continuousVoiceMode && !voiceRecognitionActive && !manualVoiceStop) {
-                    startVoiceAssistant(true);
-                }
-            }, delayMs);
-        }
-
-        function cleanStepForBlindUser(step) {
-            let cleaned = step || "";
-            cleaned = cleaned.replace(/slight right/gi, "slightly right");
-            cleaned = cleaned.replace(/slight left/gi, "slightly left");
-            cleaned = cleaned.replace(/continue/gi, "walk straight");
-            cleaned = cleaned.replace(/onto/gi, "on");
-            cleaned = cleaned.replace(/for (\d+) metres/gi, "for $1 metres");
-            return cleaned;
-        }
-
-        function updateCurrentStepDisplay() {
-            const counter = document.getElementById("stepCounter");
-            const currentStepText = document.getElementById("currentStepText");
-
-            if (!outdoorSteps.length) {
-                counter.textContent = "No route loaded yet.";
-                currentStepText.textContent = "Waiting for route instructions...";
-                return;
-            }
-
-            counter.textContent = `Step ${currentStepIndex + 1} of ${outdoorSteps.length}`;
-            currentStepText.textContent = outdoorSteps[currentStepIndex];
-        }
-
-        function speakCurrentStep() {
-            if (!outdoorSteps.length) return;
-            const step = cleanStepForBlindUser(outdoorSteps[currentStepIndex]);
-            speakText(step, true);
-        }
-
-        function repeatStep() {
-            if (!outdoorSteps.length) {
-                speakText("No route is loaded yet.", true);
-                return;
-            }
-            speakCurrentStep();
-        }
-
-        function getCurrentLocationPromise() {
-            return new Promise((resolve, reject) => {
-                if (!navigator.geolocation) {
-                    reject(new Error("Geolocation is not supported in this browser."));
-                    return;
-                }
-
-                navigator.geolocation.getCurrentPosition(
-                    function(position) {
-                        resolve(position);
-                    },
-                    function(error) {
-                        reject(error);
-                    },
-                    {
-                        enableHighAccuracy: true,
-                        timeout: 10000,
-                        maximumAge: 0
-                    }
-                );
-            });
-        }
-
-        async function loadCurrentLocationSilently() {
-            try {
-                const position = await getCurrentLocationPromise();
-                document.getElementById("currentLat").value = position.coords.latitude;
-                document.getElementById("currentLon").value = position.coords.longitude;
-                updateLiveNavPills({
-                    accuracy: position.coords.accuracy
-                });
-                return true;
-            } catch (error) {
-                return false;
-            }
-        }
-
-        function toRadians(value) {
-            return value * Math.PI / 180;
-        }
-
-        function haversineDistanceMeters(lat1, lon1, lat2, lon2) {
-            if (
-                lat1 === null || lat1 === undefined ||
-                lon1 === null || lon1 === undefined ||
-                lat2 === null || lat2 === undefined ||
-                lon2 === null || lon2 === undefined
-            ) {
-                return Infinity;
-            }
-
-            const earthRadius = 6371000;
-            const dLat = toRadians(lat2 - lat1);
-            const dLon = toRadians(lon2 - lon1);
-
-            const a =
-                Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) *
-                Math.sin(dLon / 2) * Math.sin(dLon / 2);
-
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            return earthRadius * c;
-        }
-
-        function updateLiveNavPills({ accuracy = null, nextTurnDistance = null, destinationDistance = null, tracking = null } = {}) {
-            const accuracyPill = document.getElementById("gpsAccuracyPill");
-            const nextTurnPill = document.getElementById("nextTurnDistancePill");
-            const destinationPill = document.getElementById("destinationDistancePill");
-            const trackingPill = document.getElementById("trackingStatePill");
-
-            const accuracyText = accuracy !== null && accuracy !== undefined ? `${Math.round(accuracy)} m` : "Unknown";
-            const nextTurnText = nextTurnDistance !== null && nextTurnDistance !== undefined && isFinite(nextTurnDistance)
-                ? `${Math.round(nextTurnDistance)} m`
-                : "Unknown";
-            const destinationText = destinationDistance !== null && destinationDistance !== undefined && isFinite(destinationDistance)
-                ? `${Math.round(destinationDistance)} m`
-                : "Unknown";
-            const trackingText = tracking !== null ? tracking : (liveTrackingActive ? "On" : "Off");
-
-            if (accuracyPill) accuracyPill.textContent = `GPS Accuracy: ${accuracyText}`;
-            if (nextTurnPill) nextTurnPill.textContent = `Next Turn: ${nextTurnText}`;
-            if (destinationPill) destinationPill.textContent = `Destination: ${destinationText}`;
-            if (trackingPill) trackingPill.textContent = `Tracking: ${trackingText}`;
-
-            document.getElementById("gpsAccuracyValue").textContent = accuracyText;
-            document.getElementById("nextTurnDistanceValue").textContent = nextTurnText;
-            document.getElementById("destinationDistanceValue").textContent = destinationText;
-            document.getElementById("trackingStateValue").textContent = trackingText;
-        }
-
-        function setLiveNavStatus(text) {
-            document.getElementById("liveNavStatus").textContent = text;
-        }
-
-        function getStepDistanceFromUser(userLat, userLon, stepIndex) {
-            const step = outdoorStepData[stepIndex];
-            if (!step || step.lat === null || step.lon === null || step.lat === undefined || step.lon === undefined) {
-                return Infinity;
-            }
-
-            return haversineDistanceMeters(userLat, userLon, step.lat, step.lon);
-        }
-
-        function getCurrentDestinationDistance() {
-            const lat = parseFloat(document.getElementById("currentLat").value);
-            const lon = parseFloat(document.getElementById("currentLon").value);
-
-            if (!currentRouteDestination || Number.isNaN(lat) || Number.isNaN(lon)) {
-                return null;
-            }
-
-            return haversineDistanceMeters(
-                lat,
-                lon,
-                currentRouteDestination.lat,
-                currentRouteDestination.lon
-            );
-        }
-
-        function findBestCurrentStepIndex(userLat, userLon) {
-            if (!outdoorStepData.length) {
-                return currentStepIndex;
-            }
-
-            let bestIndex = currentStepIndex;
-            let bestDistance = Infinity;
-
-            const searchStart = Math.max(0, currentStepIndex);
-            const searchEnd = Math.min(outdoorStepData.length - 1, currentStepIndex + 3);
-
-            for (let i = searchStart; i <= searchEnd; i++) {
-                const step = outdoorStepData[i];
-                if (!step || step.maneuver_type === "arrive") continue;
-
-                const distance = getStepDistanceFromUser(userLat, userLon, i);
-                if (distance < bestDistance) {
-                    bestDistance = distance;
-                    bestIndex = i;
-                }
-            }
-
-            return bestIndex;
-        }
-
-        function buildLiveInstruction(step, distanceToStep) {
-            if (!step) {
-                return "Continue straight.";
-            }
-
-            if (step.maneuver_type === "arrive") {
-                return "You have arrived at your destination.";
-            }
-
-            const modifier = (step.modifier || "").replaceAll("_", " ").trim().toLowerCase();
-            const street = (step.street_name || "").trim();
-
-            if (distanceToStep <= NOW_TURN_DISTANCE_M) {
-                if (step.maneuver_type === "turn" && modifier) {
-                    if (street) {
-                        return `Turn ${modifier} now onto ${street}.`;
-                    }
-                    return `Turn ${modifier} now.`;
-                }
-
-                if (step.maneuver_type === "fork" && modifier) {
-                    return `Keep ${modifier} now.`;
-                }
-
-                if (step.maneuver_type === "merge" && modifier) {
-                    return `Merge ${modifier} now.`;
-                }
-
-                return cleanStepForBlindUser(step.instruction);
-            }
-
-            if (distanceToStep <= APPROACH_WARNING_DISTANCE_M) {
-                if (step.maneuver_type === "turn" && modifier) {
-                    return `In ${Math.round(distanceToStep)} meters, turn ${modifier}.`;
-                }
-
-                if (step.maneuver_type === "fork" && modifier) {
-                    return `In ${Math.round(distanceToStep)} meters, keep ${modifier}.`;
-                }
-
-                if (step.maneuver_type === "merge" && modifier) {
-                    return `In ${Math.round(distanceToStep)} meters, merge ${modifier}.`;
-                }
-
-                return `In ${Math.round(distanceToStep)} meters, ${cleanStepForBlindUser(step.instruction)}`;
-            }
-
-            return "Continue straight.";
-        }
-
-        function shouldSpeakLiveInstruction(key, force = false) {
-            const now = Date.now();
-
-            if (force) {
-                lastLiveInstructionKey = key;
-                lastLiveInstructionTime = now;
-                return true;
-            }
-
-            if (key !== lastLiveInstructionKey) {
-                lastLiveInstructionKey = key;
-                lastLiveInstructionTime = now;
-                return true;
-            }
-
-            if (now - lastLiveInstructionTime >= LIVE_GUIDANCE_COOLDOWN_MS) {
-                lastLiveInstructionTime = now;
-                return true;
-            }
-
-            return false;
-        }
-
-        function handleArrival(userLat, userLon) {
-            if (!currentRouteDestination) return false;
-
-            const destinationDistance = haversineDistanceMeters(
-                userLat,
-                userLon,
-                currentRouteDestination.lat,
-                currentRouteDestination.lon
-            );
-
-            updateLiveNavPills({
-                destinationDistance: destinationDistance,
-                tracking: liveTrackingActive ? "On" : "Off"
-            });
-
-            if (destinationDistance <= DESTINATION_ARRIVAL_THRESHOLD_M) {
-                currentStepIndex = outdoorSteps.length ? outdoorSteps.length - 1 : currentStepIndex;
-                updateCurrentStepDisplay();
-                setLiveNavStatus("You are at the destination.");
-
-                if (!hasArrivalBeenAnnounced) {
-                    hasArrivalBeenAnnounced = true;
-                    speakText("You have arrived at your destination.", true);
-                }
-
-                stopLiveTracking(false);
-                return true;
-            }
-
-            return false;
-        }
-
-        function processLiveNavigation(position) {
-            const userLat = position.coords.latitude;
-            const userLon = position.coords.longitude;
-            const accuracy = position.coords.accuracy;
-
-            document.getElementById("currentLat").value = userLat;
-            document.getElementById("currentLon").value = userLon;
-
-            if (!navigationStarted || !outdoorSteps.length || !outdoorStepData.length) {
-                updateLiveNavPills({
-                    accuracy: accuracy,
-                    tracking: liveTrackingActive ? "On" : "Off"
-                });
-                setLiveNavStatus("Tracking location, but no outdoor route is active.");
-                return;
-            }
-
-            if (handleArrival(userLat, userLon)) {
-                updateLiveNavPills({
-                    accuracy: accuracy,
-                    tracking: "Off"
-                });
-                return;
-            }
-
-            const bestIndex = findBestCurrentStepIndex(userLat, userLon);
-            if (bestIndex > currentStepIndex) {
-                currentStepIndex = bestIndex;
-            }
-
-            const step = outdoorStepData[currentStepIndex];
-            const distanceToStep = getStepDistanceFromUser(userLat, userLon, currentStepIndex);
-            const destinationDistance = currentRouteDestination
-                ? haversineDistanceMeters(userLat, userLon, currentRouteDestination.lat, currentRouteDestination.lon)
-                : null;
-
-            updateCurrentStepDisplay();
-            updateLiveNavPills({
-                accuracy: accuracy,
-                nextTurnDistance: distanceToStep,
-                destinationDistance: destinationDistance,
-                tracking: liveTrackingActive ? "On" : "Off"
-            });
-
-            const liveInstruction = buildLiveInstruction(step, distanceToStep);
-            setLiveNavStatus(`Live guidance active. ${liveInstruction}`);
-
-            const instructionKey = `${currentStepIndex}|${Math.round(distanceToStep / 5)}|${liveInstruction}`;
-
-            if (distanceToStep <= STEP_REACHED_THRESHOLD_M && currentStepIndex < outdoorStepData.length - 1) {
-                if (lastAnnouncedStepIndex !== currentStepIndex) {
-                    lastAnnouncedStepIndex = currentStepIndex;
-                    speakText(cleanStepForBlindUser(step.instruction), true);
-                }
-
-                currentStepIndex += 1;
-                updateCurrentStepDisplay();
-
-                const nextStep = outdoorStepData[currentStepIndex];
-                if (nextStep) {
-                    const nextDistance = getStepDistanceFromUser(userLat, userLon, currentStepIndex);
-                    const nextInstruction = buildLiveInstruction(nextStep, nextDistance);
-                    const nextKey = `next|${currentStepIndex}|${Math.round(nextDistance / 5)}|${nextInstruction}`;
-
-                    if (shouldSpeakLiveInstruction(nextKey, true)) {
-                        speakText(nextInstruction, true);
-                    }
-                }
-
-                return;
-            }
-
-            if (shouldSpeakLiveInstruction(instructionKey, false)) {
-                speakText(liveInstruction, false);
-            }
-        }
-
-        function startLiveTracking() {
-            if (!navigator.geolocation) {
-                setLiveNavStatus("Live GPS tracking is not supported in this browser.");
-                speakText("Live GPS tracking is not supported in this browser.", true);
-                return;
-            }
-
-            if (!navigationStarted || !outdoorSteps.length) {
-                setLiveNavStatus("Start an outdoor route first before live tracking.");
-                speakText("Please say your destination first.", true);
-                return;
-            }
-
-            if (liveTrackingWatchId !== null) {
-                return;
-            }
-
-            hasArrivalBeenAnnounced = false;
-            liveTrackingActive = true;
-
-            updateLiveNavPills({
-                tracking: "On"
-            });
-
-            setLiveNavStatus("Starting live GPS tracking...");
-
-            liveTrackingWatchId = navigator.geolocation.watchPosition(
-                function(position) {
-                    processLiveNavigation(position);
-                },
-                function(error) {
-                    liveTrackingActive = false;
-                    updateLiveNavPills({
-                        tracking: "Off"
-                    });
-
-                    if (error.code === error.PERMISSION_DENIED) {
-                        setLiveNavStatus("Location permission denied.");
-                    } else if (error.code === error.POSITION_UNAVAILABLE) {
-                        setLiveNavStatus("Location information is unavailable.");
-                    } else if (error.code === error.TIMEOUT) {
-                        setLiveNavStatus("Location request timed out.");
-                    } else {
-                        setLiveNavStatus("Live tracking failed.");
-                    }
-                },
-                {
-                    enableHighAccuracy: true,
-                    maximumAge: 2000,
-                    timeout: 10000
-                }
-            );
-
-            speakText("Live navigation tracking started.", true);
-        }
-
-        function stopLiveTracking(announce = true) {
-            if (liveTrackingWatchId !== null) {
-                navigator.geolocation.clearWatch(liveTrackingWatchId);
-                liveTrackingWatchId = null;
-            }
-
-            liveTrackingActive = false;
-            updateLiveNavPills({
-                tracking: "Off"
-            });
-
-            if (!hasArrivalBeenAnnounced) {
-                setLiveNavStatus("Live GPS tracking stopped.");
-                if (announce) {
-                    speakText("Live GPS tracking stopped.", true);
-                }
-            }
-        }
-
-        function stopNavigation(announce = true) {
-            stopLiveTracking(false);
-            navigationStarted = false;
-            outdoorSteps = [];
-            outdoorStepData = [];
-            currentStepIndex = 0;
-            currentRouteDestination = null;
-            routeGeometry = [];
-            updateCurrentStepDisplay();
-            setLiveNavStatus("Navigation stopped.");
-            if (announce) {
-                speakText("Navigation stopped.", true);
-            }
-        }
-
-        async function startOutdoorNavigation() {
-            let startLat = document.getElementById("currentLat").value;
-            let startLon = document.getElementById("currentLon").value;
-            const destination = document.getElementById("outdoorDestination").value.trim();
-            const resultBox = document.getElementById("outdoorResult");
-
-            if (!startLat || !startLon) {
-                const locationLoaded = await loadCurrentLocationSilently();
-                startLat = document.getElementById("currentLat").value;
-                startLon = document.getElementById("currentLon").value;
-
-                if (!locationLoaded || !startLat || !startLon) {
-                    resultBox.innerHTML = "<p>Could not get your location. Please allow location access.</p>";
-                    speakText("I could not get your location. Please allow location access.", true);
-                    return false;
-                }
-            }
-
-            if (!destination) {
-                resultBox.innerHTML = "<p>Please enter a destination or say one by voice.</p>";
-                speakText("Please say your destination.", true);
-                return false;
-            }
-
-            resultBox.innerHTML = "<p>Generating outdoor walking route...</p>";
-
-            try {
-                const response = await fetch("/outdoor-navigate", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        start_lat: startLat,
-                        start_lon: startLon,
-                        destination: destination
-                    })
-                });
-
-                const data = await response.json();
-
-                if (!data.success) {
-                    resultBox.innerHTML = `<p>${data.message}</p>`;
-                    speakText(data.message || "I could not generate the route.", true);
-                    return false;
-                }
-
-                outdoorSteps = data.steps || [];
-                outdoorStepData = Array.isArray(data.step_data) ? data.step_data : [];
-                currentRouteDestination = data.destination || null;
-                routeGeometry = Array.isArray(data.route_geometry) ? data.route_geometry : [];
-
-                currentStepIndex = 0;
-                navigationStarted = true;
-                hasArrivalBeenAnnounced = false;
-                lastAnnouncedStepIndex = -1;
-                lastLiveInstructionKey = "";
-                lastLiveInstructionTime = 0;
-
-                resultBox.innerHTML = `
-                    <p><strong>Destination:</strong> ${data.destination_name}</p>
-                    <p><strong>Distance:</strong> ${data.distance_m} metres</p>
-                    <p><strong>Estimated Time:</strong> ${data.duration_min} minutes</p>
-                `;
-
-                updateCurrentStepDisplay();
-                setLiveNavStatus("Route loaded. Live tracking will guide you automatically.");
-                speakText(`Route ready to ${data.destination_name}.`, true);
-
-                setTimeout(() => {
-                    speakCurrentStep();
-                }, 1200);
-
-                startLiveTracking();
-                return true;
-            } catch (error) {
-                resultBox.innerHTML = "<p>An error occurred while generating the outdoor route.</p>";
-                speakText("An error occurred while generating the route.", true);
-                return false;
-            }
-        }
-
-        function formatHazardLabel(hazardType) {
-            if (!hazardType) return "";
-
-            const spokenLabels = {
-                step_or_curb: "step or curb",
-                low_visibility: "low visibility",
-                fire_hydrant: "fire hydrant",
-                stop_sign: "stop sign",
-                potted_plant: "potted plant",
-                parking_meter: "parking meter",
-                traffic_light: "traffic light",
-                vertical_obstacle: "pole like obstacle"
-            };
-
-            return spokenLabels[hazardType] || hazardType.replaceAll("_", " ");
-        }
-
-        function prettyLabel(text, fallback = "none") {
-            if (!text) return fallback;
-            return text.replaceAll("_", " ");
-        }
-
-        function updateHazardMeta(data) {
-            document.getElementById("hazardTypePill").textContent =
-                `Type: ${formatHazardLabel(data.hazard_type) || "none"}`;
-            document.getElementById("hazardDistancePill").textContent =
-                `Distance: ${prettyLabel(data.distance_label)}`;
-            document.getElementById("hazardDirectionPill").textContent =
-                `Direction: ${prettyLabel(data.direction_label)}`;
-            document.getElementById("hazardSeverityPill").textContent =
-                `Severity: ${prettyLabel(data.severity)}`;
-        }
-
-        function resetHazardMeta() {
-            document.getElementById("hazardTypePill").textContent = "Type: none";
-            document.getElementById("hazardDistancePill").textContent = "Distance: none";
-            document.getElementById("hazardDirectionPill").textContent = "Direction: none";
-            document.getElementById("hazardSeverityPill").textContent = "Severity: none";
-        }
-
-        function buildHazardSpeech(data) {
-            if (data.message) {
-                return data.message;
-            }
-
-            const label = formatHazardLabel(data.hazard_type);
-            if (!label) return "Hazard detected.";
-
-            return `${label} ahead.`;
-        }
-
-        function canSpeakHazard(hazardType, severity, message) {
-            const now = Date.now();
-            const speechKey = `${hazardType || ""}|${severity || ""}|${message || ""}`;
-
-            if (speechKey !== lastSpokenHazard) {
-                lastSpokenHazard = speechKey;
-                lastHazardType = hazardType || "";
-                lastHazardSeverity = severity || "";
-                lastHazardTime = now;
-                return true;
-            }
-
-            if (now - lastHazardTime >= HAZARD_COOLDOWN_MS) {
-                lastHazardTime = now;
-                return true;
-            }
-
-            return false;
-        }
-
-        function getOverlayCanvas() {
-            return document.getElementById("overlayCanvas");
-        }
-
-        function clearOverlay() {
-            const overlay = getOverlayCanvas();
-            const ctx = overlay.getContext("2d");
-            ctx.clearRect(0, 0, overlay.width, overlay.height);
-        }
-
-        function getBoxColor(severity) {
-            if (severity === "urgent") return "#ff3b30";
-            if (severity === "warning") return "#ff9500";
-            return "#ffd60a";
-        }
-
-        function syncOverlaySize() {
-            const video = document.getElementById("cameraFeed");
-            const overlay = getOverlayCanvas();
-
-            const rect = video.getBoundingClientRect();
-            overlay.width = rect.width;
-            overlay.height = rect.height;
-        }
-
-        function drawDetections(detections) {
-            const video = document.getElementById("cameraFeed");
-            const overlay = getOverlayCanvas();
-            const ctx = overlay.getContext("2d");
-
-            if (!video.videoWidth || !video.videoHeight) return;
-
-            syncOverlaySize();
-            ctx.clearRect(0, 0, overlay.width, overlay.height);
-            ctx.lineWidth = 3;
-            ctx.font = "bold 15px Arial";
-
-            const scaleX = overlay.width / video.videoWidth;
-            const scaleY = overlay.height / video.videoHeight;
-
-            detections.forEach((item) => {
-                if (!item.bbox) return;
-
-                const x1 = item.bbox.x1 * scaleX;
-                const y1 = item.bbox.y1 * scaleY;
-                const x2 = item.bbox.x2 * scaleX;
-                const y2 = item.bbox.y2 * scaleY;
-
-                const width = x2 - x1;
-                const height = y2 - y1;
-                const color = getBoxColor(item.severity);
-
-                ctx.strokeStyle = color;
-                ctx.fillStyle = color;
-                ctx.strokeRect(x1, y1, width, height);
-
-                const labelParts = [
-                    formatHazardLabel(item.hazard_type),
-                    item.distance_label ? prettyLabel(item.distance_label) : "",
-                    item.direction_label ? prettyLabel(item.direction_label) : ""
-                ].filter(Boolean);
-
-                const label = labelParts.join(" • ");
-                const textWidth = ctx.measureText(label).width + 12;
-                const textY = Math.max(24, y1 - 8);
-
-                ctx.fillRect(x1, textY - 22, textWidth, 24);
-                ctx.fillStyle = "#ffffff";
-                ctx.fillText(label, x1 + 6, textY - 5);
-            });
-        }
-
-        function clearHazard() {
-            lastSpokenHazard = "";
-            lastHazardType = "";
-            lastHazardSeverity = "";
-            lastHazardTime = 0;
-            resetHazardMeta();
-            clearOverlay();
-            showHazardMetaPanel(false);
-            setHazardBannerState("safe", "No hazard detected.");
-        }
-
-        function scheduleNextHazardCheck() {
-            if (!monitoringActive) return;
-
-            monitoringInterval = setTimeout(async () => {
-                await captureAndDetectHazard();
-                scheduleNextHazardCheck();
-            }, HAZARD_CAPTURE_INTERVAL_MS);
-        }
-
-        async function startHazardMonitoring() {
-            const video = document.getElementById("cameraFeed");
-
-            try {
-                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                    setHazardBannerState("warning", "Camera access is not supported on this device.");
-                    return;
-                }
-
-                if (!cameraStream) {
-                    cameraStream = await navigator.mediaDevices.getUserMedia({
-                        video: {
-                            facingMode: { ideal: "environment" },
-                            width: { ideal: 1280 },
-                            height: { ideal: 720 }
-                        },
-                        audio: false
-                    });
-                    video.srcObject = cameraStream;
-                }
-
-                monitoringActive = true;
-                detectionInProgress = false;
-
-                if (monitoringInterval) {
-                    clearTimeout(monitoringInterval);
-                    monitoringInterval = null;
-                }
-
-                showHazardMetaPanel(false);
-                setHazardBannerState("neutral", "Hazard monitoring started.");
-                speakText("Hazard monitoring started.", true);
-
-                video.onloadedmetadata = () => {
-                    syncOverlaySize();
-                };
-
-                scheduleNextHazardCheck();
-
-            } catch (error) {
-                setHazardBannerState("warning", "Could not access the camera. Please allow camera permission.");
-            }
-        }
-
-        function stopHazardMonitoring() {
-            const video = document.getElementById("cameraFeed");
-
-            monitoringActive = false;
-            detectionInProgress = false;
-
-            if (monitoringInterval) {
-                clearTimeout(monitoringInterval);
-                monitoringInterval = null;
-            }
-
-            if (cameraStream) {
-                cameraStream.getTracks().forEach(track => track.stop());
-                cameraStream = null;
-            }
-
-            video.srcObject = null;
-
-            lastSpokenHazard = "";
-            lastHazardType = "";
-            lastHazardSeverity = "";
-            lastHazardTime = 0;
-
-            resetHazardMeta();
-            clearOverlay();
-            showHazardMetaPanel(false);
-            setHazardBannerState("neutral", "Hazard monitoring stopped.");
-            speakText("Hazard monitoring stopped.", true);
-        }
-
-        async function captureAndDetectHazard() {
-            const video = document.getElementById("cameraFeed");
-            const canvas = document.getElementById("captureCanvas");
-
-            if (!monitoringActive) return;
-            if (detectionInProgress) return;
-            if (!video.videoWidth || !video.videoHeight) return;
-
-            detectionInProgress = true;
-
-            try {
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-
-                const context = canvas.getContext("2d");
-                context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-                const frameData = canvas.toDataURL("image/jpeg", 0.78);
-
-                const response = await fetch("/detect-hazard", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ frame: frameData })
-                });
-
-                const data = await response.json();
-
-                if (!data.success) {
-                    setHazardBannerState("warning", "Hazard detection failed.");
-                    resetHazardMeta();
-                    showHazardMetaPanel(false);
-                    clearOverlay();
-                    return;
-                }
-
-                drawDetections(data.detections || []);
-
-                if (data.hazard_detected) {
-                    updateHazardMeta(data);
-                    showHazardMetaPanel(true);
-
-                    if (data.severity === "urgent") {
-                        setHazardBannerState("urgent", data.message || "Urgent hazard detected.");
-                    } else {
-                        setHazardBannerState("warning", data.message || "Hazard detected ahead.");
-                    }
-
-                    const speech = buildHazardSpeech(data);
-
-                    if (canSpeakHazard(data.hazard_type, data.severity, speech)) {
-                        if (data.severity === "urgent" || data.severity === "warning") {
-                            speakText(speech, true);
-                        } else {
-                            speakText(speech, false);
-                        }
-                    }
-                } else {
-                    lastSpokenHazard = "";
-                    lastHazardType = "";
-                    lastHazardSeverity = "";
-                    resetHazardMeta();
-                    showHazardMetaPanel(false);
-                    clearOverlay();
-                    setHazardBannerState("safe", data.message || "No immediate hazard detected.");
-                }
-            } catch (error) {
-                setHazardBannerState("warning", "Error while checking hazards.");
-                resetHazardMeta();
-                showHazardMetaPanel(false);
-                clearOverlay();
-            } finally {
-                detectionInProgress = false;
-            }
-        }
-
-        function startVoiceAssistant(isAutoRestart = false) {
-            const voiceStatus = document.getElementById("voiceStatus");
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-            if (!SpeechRecognition) {
-                voiceStatus.textContent = "Voice recognition is not supported on this device.";
-                speakText("Voice recognition is not supported on this device.", true);
-                return;
-            }
-
-            if (voiceRecognitionActive) {
-                return;
-            }
-
-            if (!isAutoRestart) {
-                continuousVoiceMode = true;
-                manualVoiceStop = false;
-            }
-
-            updateVoiceModeUI();
-
-            voiceRecognition = new SpeechRecognition();
-            voiceRecognition.lang = "en-AU";
-            voiceRecognition.interimResults = false;
-            voiceRecognition.maxAlternatives = 1;
-            voiceRecognition.continuous = false;
-
-            voiceRecognitionActive = true;
-            restartVoiceAfterCommand = false;
-
-            voiceStatus.textContent = continuousVoiceMode
-                ? "NavGuid is listening for your command."
-                : "Voice assistant is ready.";
-
-            if (!isAutoRestart && !initialVoiceGreetingDone) {
-                initialVoiceGreetingDone = true;
-                speakText("NavGuid is ready. Please say your destination.", true);
-            }
-
-            voiceRecognition.start();
-
-            voiceRecognition.onresult = async function(event) {
-                const command = event.results[0][0].transcript.toLowerCase().trim();
-                voiceStatus.textContent = `Heard: ${command}`;
-                restartVoiceAfterCommand = continuousVoiceMode;
-                await handleVoiceCommand(command);
-            };
-
-            voiceRecognition.onerror = function() {
-                voiceStatus.textContent = "Voice recognition failed. Please try again.";
-                voiceRecognitionActive = false;
-
-                if (continuousVoiceMode && !manualVoiceStop) {
-                    scheduleVoiceRestart(1200);
-                }
-            };
-
-            voiceRecognition.onend = function() {
-                voiceRecognitionActive = false;
-
-                if (manualVoiceStop) {
-                    return;
-                }
-
-                if (restartVoiceAfterCommand && continuousVoiceMode) {
-                    voiceStatus.textContent = "Listening again for the next command...";
-                    scheduleVoiceRestart(900);
-                    return;
-                }
-
-                if (continuousVoiceMode) {
-                    voiceStatus.textContent = "NavGuid is listening.";
-                    scheduleVoiceRestart(1200);
-                } else {
-                    voiceStatus.textContent = "Voice assistant ready.";
-                }
-            };
-        }
-
-        async function autoStartNavigationToDestination(destination) {
-            speakText(`Setting destination to ${destination}. Getting your location now.`, true);
-
-            try {
-                const positionLoaded = await loadCurrentLocationSilently();
-
-                if (!positionLoaded) {
-                    speakText("I could not get your location. Please allow location access and try again.", true);
-                    return;
-                }
-
-                document.getElementById("outdoorDestination").value = destination;
-
-                speakText(`Location loaded. Starting navigation to ${destination}.`, true);
-
-                const success = await startOutdoorNavigation();
-
-                if (!success) {
-                    speakText("I could not start navigation. Please try again.", true);
-                }
-            } catch (error) {
-                speakText("I could not get your location. Please allow location access and try again.", true);
-            }
-        }
-
-        async function handleVoiceCommand(command) {
-            if (command.includes("stop listening") || command.includes("stop voice assistant")) {
-                stopAllVoiceAssistantListening(true);
-                return;
-            }
-
-            if (command.includes("stop voice")) {
-                stopVoice();
-                speakText("Voice playback stopped.", true);
-                return;
-            }
-
-            if (command.includes("stop navigation")) {
-                stopNavigation(true);
-                return;
-            }
-
-            if (command.includes("start navigation")) {
-                const destination = document.getElementById("outdoorDestination").value.trim();
-
-                if (!destination) {
-                    speakText("Please say your destination first.", true);
-                    return;
-                }
-
-                await startOutdoorNavigation();
-                return;
-            }
-
-            if (command.includes("repeat step") || command.includes("what is my next step") || command.includes("what's my next step")) {
-                if (!outdoorSteps.length) {
-                    speakText("No route is loaded yet.", true);
-                    return;
-                }
-
-                speakCurrentStep();
-                return;
-            }
-
-            if (command.includes("how far is the destination") || command.includes("distance to destination")) {
-                const distance = getCurrentDestinationDistance();
-
-                if (distance === null || !isFinite(distance)) {
-                    speakText("I do not have a destination distance yet.", true);
-                } else {
-                    speakText(`The destination is about ${Math.round(distance)} meters away.`, true);
-                }
-                return;
-            }
-
-            if (command.includes("where am i")) {
-                const lat = document.getElementById("currentLat").value;
-                const lon = document.getElementById("currentLon").value;
-
-                if (lat && lon) {
-                    speakText(`Your current coordinates are latitude ${lat} and longitude ${lon}.`, true);
-                } else {
-                    speakText("Your current location has not been loaded yet.", true);
-                }
-                return;
-            }
-
-            if (command.includes("what is my destination")) {
-                const destination = document.getElementById("outdoorDestination").value.trim();
-
-                if (destination) {
-                    speakText(`Your destination is ${destination}.`, true);
-                } else {
-                    speakText("No destination has been set yet.", true);
-                }
-                return;
-            }
-
-            if (command.includes("start hazard monitoring")) {
-                await startHazardMonitoring();
-                return;
-            }
-
-            if (command.includes("stop hazard monitoring")) {
-                stopHazardMonitoring();
-                return;
-            }
-
-            if (command.includes("take me to")) {
-                const destination = command.replace("take me to", "").trim();
-
-                if (destination) {
-                    await autoStartNavigationToDestination(destination);
-                    return;
-                }
-            }
-
-            speakText("I did not catch that. Please say your destination or say repeat step.", true);
-        }
-
-        window.addEventListener("resize", syncOverlaySize);
-
-        window.addEventListener("load", async () => {
-            await loadCurrentLocationSilently();
-            setHazardBannerState("neutral", "Hazard monitoring is off.");
-            showHazardMetaPanel(false);
-            startVoiceAssistant();
+    };
+
+    recognition.start();
+}
+
+function getRoute(dest) {
+    fetch("/route?destination=" + dest)
+        .then(res => res.json())
+        .then(data => {
+            steps = data.steps;
+            currentStep = 0;
+            speakStep();
+            trackPosition();
         });
-    </script>
+}
+
+function speakStep() {
+    if (steps[currentStep]) {
+        let step = steps[currentStep];
+        document.getElementById("navText").innerText = step;
+        speak(step);
+    }
+}
+
+function trackPosition() {
+    navigator.geolocation.watchPosition(pos => {
+        nextStep();
+    });
+}
+
+function nextStep() {
+    if (currentStep < steps.length - 1) {
+        currentStep++;
+        speakStep();
+    } else {
+        speak("You have arrived");
+    }
+}
+
+function startCamera() {
+    navigator.mediaDevices.getUserMedia({ video: true })
+    .then(stream => {
+        document.getElementById("camera").srcObject = stream;
+        detectHazard();
+    });
+}
+
+function detectHazard() {
+    const video = document.getElementById("camera");
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+
+    setInterval(() => {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0);
+
+        let data = canvas.toDataURL("image/jpeg");
+
+        fetch("/detect", {
+            method: "POST",
+            body: JSON.stringify({ image: data }),
+            headers: { "Content-Type": "application/json" }
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.hazard_detected) {
+                document.getElementById("hazardText").innerText = data.message;
+                speak(data.message);
+            }
+        });
+
+    }, 2000);
+}
+</script>
+
 </body>
 </html>
