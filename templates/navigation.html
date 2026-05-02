@@ -245,6 +245,9 @@ select, input {
 
 </div>
 
+<!-- Keep your existing navigation.html structure.
+Only replace your current <script>...</script> section with this upgraded v4 script. -->
+
 <script>
 let recognition = null;
 let recognitionActive = false;
@@ -270,20 +273,24 @@ let introHasRun = false;
 let preferredVoice = null;
 let lastHazardSpeech = "";
 let lastHazardSpeechTime = 0;
+let lastHazardKey = "";
+let lastVibrationKey = "";
+let lastVibrationTime = 0;
 let lastGuidanceSpeechKey = "";
 let lastGuidanceSpeechTime = 0;
 let lastTurnVibrationKey = "";
 let detectionFrameWidth = null;
 let detectionFrameHeight = null;
 
-const HAZARD_COOLDOWN_MS = 3300;
+const HAZARD_COOLDOWN_MS = 4800;
+const VIBRATION_COOLDOWN_MS = 3000;
 const DESTINATION_ARRIVAL_THRESHOLD_M = 14;
 const STEP_REACHED_THRESHOLD_M = 18;
 const APPROACH_DISTANCE_M = 28;
 const NOW_TURN_DISTANCE_M = 10;
 const GUIDANCE_COOLDOWN_MS = 4200;
 
-const DETECTION_INTERVAL_MS = 1900;
+const DETECTION_INTERVAL_MS = 2000;
 const DETECTION_FRAME_MAX_WIDTH = 640;
 const DETECTION_JPEG_QUALITY = 0.62;
 
@@ -291,12 +298,41 @@ function byId(id) {
     return document.getElementById(id);
 }
 
-function vibrate(pattern) {
+function vibrate(pattern, key = "default", force = false) {
     try {
-        if ("vibrate" in navigator) {
-            navigator.vibrate(pattern);
+        if (!("vibrate" in navigator)) return;
+
+        const now = Date.now();
+
+        if (!force && key === lastVibrationKey && now - lastVibrationTime < VIBRATION_COOLDOWN_MS) {
+            return;
         }
+
+        lastVibrationKey = key;
+        lastVibrationTime = now;
+        navigator.vibrate(pattern);
     } catch (error) {}
+}
+
+function vibrateForHazard(severity, distanceLabel, directionLabel, hazardType) {
+    const key = `${severity}|${distanceLabel}|${directionLabel}|${hazardType}`;
+
+    if (severity === "urgent" || distanceLabel === "very_close") {
+        vibrate([220, 90, 220, 90, 160], key);
+        return;
+    }
+
+    if (severity === "warning" || distanceLabel === "close") {
+        vibrate([160, 80, 160], key);
+        return;
+    }
+
+    if (directionLabel === "center") {
+        vibrate([120], key);
+        return;
+    }
+
+    vibrate([70], key);
 }
 
 function initialiseVoices() {
@@ -370,23 +406,56 @@ function speakGuidance(text, priority = false) {
     speakText(text, priority, { rate: 0.88, pauseMs: 260 });
 }
 
-function speakHazard(text, priority = true, severity = "normal", distanceLabel = "") {
+function getHazardKey(data) {
+    return [
+        data.hazard_type || "hazard",
+        data.severity || "normal",
+        data.distance_label || "ahead",
+        data.direction_label || "center"
+    ].join("|");
+}
+
+function shouldAnnounceHazard(message, key, severity, distanceLabel) {
     const now = Date.now();
 
-    if (text === lastHazardSpeech && now - lastHazardSpeechTime < HAZARD_COOLDOWN_MS) {
+    if (severity === "urgent" || distanceLabel === "very_close") {
+        if (now - lastHazardSpeechTime >= 2500 || key !== lastHazardKey) {
+            lastHazardSpeech = message;
+            lastHazardKey = key;
+            lastHazardSpeechTime = now;
+            return true;
+        }
+
+        return false;
+    }
+
+    if (message === lastHazardSpeech && now - lastHazardSpeechTime < HAZARD_COOLDOWN_MS) {
+        return false;
+    }
+
+    if (key === lastHazardKey && now - lastHazardSpeechTime < HAZARD_COOLDOWN_MS) {
+        return false;
+    }
+
+    lastHazardSpeech = message;
+    lastHazardKey = key;
+    lastHazardSpeechTime = now;
+    return true;
+}
+
+function speakHazard(text, data, priority = true) {
+    const key = getHazardKey(data);
+
+    if (!shouldAnnounceHazard(text, key, data.severity, data.distance_label)) {
         return;
     }
 
-    lastHazardSpeech = text;
-    lastHazardSpeechTime = now;
-
-    if (severity === "urgent" || distanceLabel === "very_close") {
-        vibrate([180, 80, 180]);
-    } else if (severity === "warning" || distanceLabel === "close") {
-        vibrate([120]);
-    } else {
-        vibrate([60]);
-    }
+    vibrateForHazard(
+        data.severity,
+        data.distance_label,
+        data.direction_label,
+        data.hazard_type
+    );
 
     speakText(text, priority, { rate: 0.86, pauseMs: 180 });
 }
@@ -540,11 +609,34 @@ function humanDistance(distanceLabel) {
     return "ahead";
 }
 
+function formatHazardType(type) {
+    if (!type) return "Hazard";
+    return type.replaceAll("_", " ").replace(/\b\w/g, c => c.toUpperCase());
+}
+
 function buildSmarterHazardMessage(data) {
-    const rawType = (data.hazard_type || data.message || "hazard").replaceAll("_", " ");
-    const type = rawType.charAt(0).toUpperCase() + rawType.slice(1);
+    const detections = data.detections || [];
+
+    const centreClose = detections.filter(item =>
+        item.direction_label === "center" &&
+        ["very_close", "close"].includes(item.distance_label)
+    );
+
+    if (centreClose.length >= 2) {
+        return "Careful. Multiple obstacles close ahead.";
+    }
+
+    const type = formatHazardType(data.hazard_type || "hazard");
     const direction = humanDirection(data.direction_label);
     const distance = humanDistance(data.distance_label);
+
+    if (data.hazard_type === "generic_obstacle") {
+        if (data.direction_label === "center") {
+            return `Caution. Obstacle ${distance}.`;
+        }
+
+        return `Caution. Obstacle ${distance}, on your ${direction}.`;
+    }
 
     if (data.direction_label === "center" || !data.direction_label) {
         return `Careful. ${type} ${distance}.`;
@@ -652,15 +744,10 @@ async function captureAndDetectHazard() {
 
             setHazardText(
                 smartMessage,
-                data.severity === "urgent" ? "urgent" : "normal"
+                data.severity === "urgent" || data.distance_label === "very_close" ? "urgent" : "normal"
             );
 
-            speakHazard(
-                smartMessage,
-                true,
-                data.severity,
-                data.distance_label
-            );
+            speakHazard(smartMessage, data, true);
         } else {
             setHazardText("No hazard detected", "safe");
 
@@ -899,7 +986,7 @@ function stopNavigationOnly() {
         speechSynthesis.cancel();
     }
 
-    vibrate([100, 60, 100]);
+    vibrate([100, 60, 100], "stop_navigation", true);
 }
 
 function resetVoiceAssistant() {
@@ -922,7 +1009,7 @@ function resetVoiceAssistant() {
         speechSynthesis.cancel();
     }
 
-    vibrate([80]);
+    vibrate([80], "reset", true);
 }
 
 function stopAll() {
@@ -951,7 +1038,7 @@ function stopAll() {
         speechSynthesis.cancel();
     }
 
-    vibrate([160, 80, 160]);
+    vibrate([160, 80, 160], "stop_all", true);
 }
 
 function toRadians(value) {
@@ -1077,7 +1164,7 @@ function maybeVibrateForTurn(instruction, speechKey) {
         lower.includes("now")
     ) {
         lastTurnVibrationKey = speechKey;
-        vibrate([100, 50, 100]);
+        vibrate([180, 80, 180], `turn_${speechKey}`, true);
     }
 }
 
@@ -1174,7 +1261,7 @@ async function startOutdoorNavigation() {
             setNavText(firstStep);
             setVoiceStatus(`Route ready to ${data.destination_name || currentDestination}.`);
             speakGuidance(`Route ready. ${firstStep}`, true);
-            vibrate([120]);
+            vibrate([120], "route_ready", true);
             startStepTracking();
         } else {
             routeActive = false;
@@ -1278,7 +1365,7 @@ function handleLiveTracking(position) {
             setNavText("You have arrived.");
             setVoiceStatus("You have arrived.");
             speakGuidance("You have arrived.", true);
-            vibrate([200, 80, 200]);
+            vibrate([260, 100, 260], "arrived", true);
         }
 
         stopTracking();
@@ -1335,7 +1422,7 @@ function repeatCurrentInstruction() {
 
     if (text) {
         speakGuidance(text, true);
-        vibrate([80]);
+        vibrate([80], "repeat", true);
     }
 }
 
