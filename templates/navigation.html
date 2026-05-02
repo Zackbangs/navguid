@@ -6,18 +6,21 @@
 <title>NavGuid Live Navigation</title>
 
 <style>
-/* ---------------- UI DESIGN ---------------- */
-
 :root {
     --bg: #08244a;
     --card: #0e315f;
     --accent: #2f6fe4;
+    --accent-hover: #275fc4;
     --text: #ffffff;
     --muted: #d7e3ff;
     --warning: #ffd43b;
     --danger: #ff6b6b;
     --safe: #8ce99a;
     --radius: 18px;
+}
+
+* {
+    box-sizing: border-box;
 }
 
 body {
@@ -28,31 +31,59 @@ body {
 }
 
 .container {
-    max-width: 820px;
+    max-width: 900px;
     margin: auto;
     padding: 20px;
     text-align: center;
 }
 
+h1 {
+    margin-bottom: 8px;
+}
+
+.subtitle {
+    color: var(--muted);
+    margin-bottom: 16px;
+}
+
 .card {
-    background: rgba(255,255,255,0.06);
+    background: rgba(255,255,255,0.07);
     padding: 18px;
     border-radius: var(--radius);
     margin-top: 14px;
+    text-align: left;
+}
+
+.card-title {
+    font-weight: bold;
+    margin-bottom: 8px;
+    color: var(--muted);
 }
 
 .main-status {
-    font-size: 1.8rem;
+    font-size: 1.5rem;
     font-weight: bold;
     min-height: 90px;
+    line-height: 1.4;
+}
+
+.status-text {
+    font-size: 1rem;
+    line-height: 1.5;
 }
 
 .hazard {
-    font-size: 1.2rem;
+    font-size: 1.15rem;
+    font-weight: bold;
 }
 
-.safe { color: var(--safe); }
-.urgent { color: var(--danger); }
+.safe {
+    color: var(--safe);
+}
+
+.urgent {
+    color: var(--danger);
+}
 
 button {
     width: 100%;
@@ -62,1173 +93,1315 @@ button {
     border: none;
     background: var(--accent);
     color: white;
-    font-size: 1.1rem;
+    font-size: 1.05rem;
+    cursor: pointer;
+}
+
+button:hover {
+    background: var(--accent-hover);
 }
 
 .secondary {
-    background: rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.14);
+}
+
+.secondary:hover {
+    background: rgba(255,255,255,0.22);
+}
+
+.danger-btn {
+    background: #b42323;
+}
+
+.danger-btn:hover {
+    background: #941b1b;
+}
+
+.camera-wrap {
+    position: relative;
+    width: 100%;
+    margin-top: 10px;
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: #000;
 }
 
 video {
     width: 100%;
-    margin-top: 10px;
+    display: block;
+}
+
+#overlayCanvas {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+.hidden {
+    display: none;
+}
+
+select, input {
+    width: 100%;
+    margin-top: 8px;
+    padding: 14px;
+    border-radius: 12px;
+    border: none;
+    font-size: 1rem;
+}
+
+.route-summary {
+    line-height: 1.6;
+}
+
+.button-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+}
+
+@media (min-width: 720px) {
+    .button-grid {
+        grid-template-columns: 1fr 1fr;
+    }
 }
 </style>
 </head>
 
 <body>
-
 <div class="container">
 
-<h1>NavGuid</h1>
+    <h1>NavGuid</h1>
+    <div class="subtitle">Voice-first indoor and outdoor assistive navigation</div>
 
-<div class="card">
-    <div id="voiceStatus">Tap start, then tell me where you want to go.</div>
-</div>
+    <div class="card">
+        <div class="card-title">Voice Status</div>
+        <div id="voiceStatus" class="status-text">
+            Tap Start Voice Navigation, then tell me where you want to go.
+        </div>
+    </div>
 
-<div class="card main-status" id="navText">
-    Waiting for command
-</div>
+    <div class="card">
+        <div class="card-title">Mode Status</div>
+        <div id="modeText" class="status-text">
+            Waiting for destination
+        </div>
+    </div>
 
-<div class="card hazard safe" id="hazardText">
-    No hazard detected
-</div>
+    <div class="card main-status">
+        <div class="card-title">Current Guidance</div>
+        <div id="navText">
+            Tap Start Voice Navigation, then say indoor navigation or take me to your destination.
+        </div>
+    </div>
 
-<video id="cameraFeed" autoplay muted playsinline></video>
+    <div class="card">
+        <div class="card-title">Hazard Status</div>
+        <div id="hazardText" class="hazard safe">
+            No hazard detected
+        </div>
+    </div>
 
-<div>
-    <button onclick="startNavigation()">Start Voice Navigation</button>
-    <button class="secondary" onclick="stopAll()">Stop Everything</button>
-</div>
+    <div class="card">
+        <div class="card-title">Camera Feed + Hazard Overlay</div>
+        <div class="camera-wrap">
+            <video id="cameraFeed" autoplay muted playsinline></video>
+            <canvas id="overlayCanvas"></canvas>
+        </div>
+    </div>
+
+    <div id="routeSummary" class="card route-summary hidden"></div>
+
+    <div id="indoorPanel" class="card hidden">
+        <div class="card-title">Indoor Navigation</div>
+
+        <label for="buildingSelect">Building</label>
+        <select id="buildingSelect">
+            <option value="torrens">Torrens Building</option>
+            <option value="shopping">Shopping Centre Demo</option>
+        </select>
+
+        <label for="indoorStart">Start Location</label>
+        <input id="indoorStart" type="text" placeholder="Example: entrance">
+
+        <label for="indoorDestination">Destination</label>
+        <input id="indoorDestination" type="text" placeholder="Example: classroom">
+
+        <button onclick="startIndoorNavigation()">Start Indoor Route</button>
+    </div>
+
+    <div class="card">
+        <div class="card-title">Controls</div>
+        <div class="button-grid">
+            <button onclick="startNavigation()">Start Voice Navigation</button>
+            <button class="secondary" onclick="repeatCurrentInstruction()">Repeat Instruction</button>
+            <button class="secondary" onclick="stopNavigationOnly()">Stop Navigation</button>
+            <button class="danger-btn" onclick="stopAll()">Stop Everything</button>
+        </div>
+    </div>
 
 </div>
 
 <script>
-    /*
-        NavGuid Navigation Script
-        -------------------------
-        Upgrades added:
-        1. Direction-aware hazard warnings
-        2. More natural turn-by-turn guidance
-        3. Vibration feedback for blind users
-        4. Render performance boost using resized camera frames
-        5. Stop navigation voice command works during navigation
-    */
+let recognition = null;
+let recognitionActive = false;
+let voiceAssistantActive = false;
+let manualStop = false;
 
-    let recognition = null;
-    let recognitionActive = false;
-    let voiceAssistantActive = false;
-    let manualStop = false;
+let cameraStream = null;
+let hazardInterval = null;
+let hazardMonitoringActive = false;
+let detectionBusy = false;
 
-    let cameraStream = null;
-    let hazardInterval = null;
-    let hazardMonitoringActive = false;
-    let detectionBusy = false;
+let currentMode = "";
+let currentDestination = "";
+let outdoorSteps = [];
+let outdoorStepData = [];
+let currentStepIndex = 0;
+let trackingWatchId = null;
+let destinationCoords = null;
+let arrivedAnnounced = false;
+let routeActive = false;
+let introHasRun = false;
 
-    let currentMode = "";
-    let currentDestination = "";
-    let outdoorSteps = [];
-    let outdoorStepData = [];
-    let currentStepIndex = 0;
-    let trackingWatchId = null;
-    let destinationCoords = null;
-    let arrivedAnnounced = false;
-    let routeActive = false;
-    let introHasRun = false;
+let preferredVoice = null;
+let lastHazardSpeech = "";
+let lastHazardSpeechTime = 0;
+let lastGuidanceSpeechKey = "";
+let lastGuidanceSpeechTime = 0;
+let lastTurnVibrationKey = "";
+let detectionFrameWidth = null;
+let detectionFrameHeight = null;
 
-    let preferredVoice = null;
-    let lastHazardSpeech = "";
-    let lastHazardSpeechTime = 0;
-    let lastGuidanceSpeechKey = "";
-    let lastGuidanceSpeechTime = 0;
-    let lastTurnVibrationKey = "";
-    let detectionFrameWidth = null;
-    let detectionFrameHeight = null;
+const HAZARD_COOLDOWN_MS = 3300;
+const DESTINATION_ARRIVAL_THRESHOLD_M = 14;
+const STEP_REACHED_THRESHOLD_M = 18;
+const APPROACH_DISTANCE_M = 28;
+const NOW_TURN_DISTANCE_M = 10;
+const GUIDANCE_COOLDOWN_MS = 4200;
 
-    const HAZARD_COOLDOWN_MS = 3300;
-    const DESTINATION_ARRIVAL_THRESHOLD_M = 14;
-    const STEP_REACHED_THRESHOLD_M = 18;
-    const APPROACH_DISTANCE_M = 28;
-    const NOW_TURN_DISTANCE_M = 10;
-    const GUIDANCE_COOLDOWN_MS = 4200;
+const DETECTION_INTERVAL_MS = 1900;
+const DETECTION_FRAME_MAX_WIDTH = 640;
+const DETECTION_JPEG_QUALITY = 0.62;
 
-    /* Render performance settings */
-    const DETECTION_INTERVAL_MS = 1900;
-    const DETECTION_FRAME_MAX_WIDTH = 640;
-    const DETECTION_JPEG_QUALITY = 0.62;
+function byId(id) {
+    return document.getElementById(id);
+}
 
-    function vibrate(pattern) {
+function vibrate(pattern) {
+    try {
         if ("vibrate" in navigator) {
             navigator.vibrate(pattern);
         }
+    } catch (error) {}
+}
+
+function initialiseVoices() {
+    if (!("speechSynthesis" in window)) return;
+
+    const voices = speechSynthesis.getVoices();
+    if (!voices.length) return;
+
+    preferredVoice =
+        voices.find(v => v.lang === "en-AU" && /samantha|karen|moira|natural|google/i.test(v.name)) ||
+        voices.find(v => v.lang.startsWith("en") && /natural|google|samantha|serena|daniel/i.test(v.name)) ||
+        voices.find(v => v.lang === "en-AU") ||
+        voices.find(v => v.lang.startsWith("en")) ||
+        voices[0];
+}
+
+if ("speechSynthesis" in window) {
+    speechSynthesis.onvoiceschanged = initialiseVoices;
+    initialiseVoices();
+}
+
+function splitSpeechIntoChunks(text) {
+    if (!text) return [];
+
+    return text
+        .replace(/[!?]/g, ".")
+        .replace(/\s+/g, " ")
+        .trim()
+        .split(".")
+        .map(sentence => sentence.trim())
+        .filter(Boolean);
+}
+
+function speakText(text, priority = false, options = {}) {
+    if (!("speechSynthesis" in window) || !text) return;
+
+    if (priority) {
+        speechSynthesis.cancel();
     }
 
-    function initialiseVoices() {
-        if (!("speechSynthesis" in window)) return;
+    const chunks = splitSpeechIntoChunks(text);
+    if (!chunks.length) return;
 
-        const voices = speechSynthesis.getVoices();
-        if (!voices.length) return;
+    const rate = options.rate ?? 0.88;
+    const pitch = options.pitch ?? 1.0;
+    const pauseMs = options.pauseMs ?? 260;
 
-        preferredVoice =
-            voices.find(v => v.lang === "en-AU" && /samantha|karen|moira|natural|google/i.test(v.name)) ||
-            voices.find(v => v.lang.startsWith("en") && /natural|google|samantha|serena|daniel/i.test(v.name)) ||
-            voices.find(v => v.lang === "en-AU") ||
-            voices.find(v => v.lang.startsWith("en")) ||
-            voices[0];
+    function speakChunk(index) {
+        if (index >= chunks.length) return;
+
+        const utterance = new SpeechSynthesisUtterance(chunks[index]);
+        utterance.lang = preferredVoice?.lang || "en-AU";
+        utterance.voice = preferredVoice || null;
+        utterance.rate = rate;
+        utterance.pitch = pitch;
+        utterance.volume = 1;
+
+        utterance.onend = () => {
+            if (index + 1 < chunks.length) {
+                setTimeout(() => speakChunk(index + 1), pauseMs);
+            }
+        };
+
+        speechSynthesis.speak(utterance);
     }
 
-    if ("speechSynthesis" in window) {
-        speechSynthesis.onvoiceschanged = initialiseVoices;
-        initialiseVoices();
+    speakChunk(0);
+}
+
+function speakGuidance(text, priority = false) {
+    speakText(text, priority, { rate: 0.88, pauseMs: 260 });
+}
+
+function speakHazard(text, priority = true, severity = "normal", distanceLabel = "") {
+    const now = Date.now();
+
+    if (text === lastHazardSpeech && now - lastHazardSpeechTime < HAZARD_COOLDOWN_MS) {
+        return;
     }
 
-    function splitSpeechIntoChunks(text) {
-        if (!text) return [];
+    lastHazardSpeech = text;
+    lastHazardSpeechTime = now;
 
-        return text
-            .replace(/[!?]/g, ".")
-            .replace(/\s+/g, " ")
-            .trim()
-            .split(".")
-            .map(sentence => sentence.trim())
-            .filter(Boolean);
+    if (severity === "urgent" || distanceLabel === "very_close") {
+        vibrate([180, 80, 180]);
+    } else if (severity === "warning" || distanceLabel === "close") {
+        vibrate([120]);
+    } else {
+        vibrate([60]);
     }
 
-    function speakText(text, priority = false, options = {}) {
-        if (!("speechSynthesis" in window) || !text) return;
+    speakText(text, priority, { rate: 0.86, pauseMs: 180 });
+}
 
-        if (priority) {
-            speechSynthesis.cancel();
-        }
+function setVoiceStatus(text) {
+    const el = byId("voiceStatus");
+    if (el) el.textContent = text;
+}
 
-        const chunks = splitSpeechIntoChunks(text);
-        if (!chunks.length) return;
+function setNavText(text) {
+    const el = byId("navText");
+    if (el) el.textContent = text;
+}
 
-        const rate = options.rate ?? 0.88;
-        const pitch = options.pitch ?? 1.0;
-        const pauseMs = options.pauseMs ?? 260;
+function setModeText(text) {
+    const el = byId("modeText");
+    if (el) el.textContent = text;
+}
 
-        function speakChunk(index) {
-            if (index >= chunks.length) return;
+function setHazardText(text, mode = "normal") {
+    const hazardText = byId("hazardText");
+    if (!hazardText) return;
 
-            const utterance = new SpeechSynthesisUtterance(chunks[index]);
-            utterance.lang = preferredVoice?.lang || "en-AU";
-            utterance.voice = preferredVoice || null;
-            utterance.rate = rate;
-            utterance.pitch = pitch;
-            utterance.volume = 1;
+    hazardText.textContent = text;
+    hazardText.classList.remove("safe", "urgent");
 
-            utterance.onend = () => {
-                if (index + 1 < chunks.length) {
-                    setTimeout(() => speakChunk(index + 1), pauseMs);
-                }
-            };
-
-            speechSynthesis.speak(utterance);
-        }
-
-        speakChunk(0);
+    if (mode === "safe") {
+        hazardText.classList.add("safe");
+    } else if (mode === "urgent") {
+        hazardText.classList.add("urgent");
     }
+}
 
-    function speakGuidance(text, priority = false) {
-        speakText(text, priority, { rate: 0.88, pauseMs: 260 });
-    }
+function normaliseStepText(step) {
+    if (!step) return "Keep going straight.";
 
-    function speakHazard(text, priority = true, severity = "normal", distanceLabel = "", directionLabel = "") {
-        const now = Date.now();
+    return String(step)
+        .replace(/slight right/gi, "slightly right")
+        .replace(/slight left/gi, "slightly left")
+        .replace(/continue straight/gi, "keep going straight")
+        .replace(/continue/gi, "keep going")
+        .replace(/metres/gi, "meters")
+        .replace(/\s+/g, " ")
+        .trim();
+}
 
-        if (text === lastHazardSpeech && now - lastHazardSpeechTime < HAZARD_COOLDOWN_MS) {
+function getUrlParams() {
+    return new URLSearchParams(window.location.search);
+}
+
+function getAutoStartConfig() {
+    const params = getUrlParams();
+    return {
+        autostart: params.get("autostart") === "1",
+        mode: (params.get("mode") || "").trim().toLowerCase(),
+        destination: (params.get("destination") || "").trim()
+    };
+}
+
+function getCurrentLocationPromise() {
+    return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) {
+            reject(new Error("Geolocation is not supported in this browser."));
             return;
         }
 
-        lastHazardSpeech = text;
-        lastHazardSpeechTime = now;
-
-        if (severity === "urgent" || distanceLabel === "very_close") {
-            vibrate([180, 80, 180]);
-        } else if (severity === "warning" || distanceLabel === "close") {
-            vibrate([120]);
-        } else {
-            vibrate([60]);
-        }
-
-        speakText(text, priority, { rate: 0.86, pauseMs: 180 });
-    }
-
-    function setVoiceStatus(text) {
-        document.getElementById("voiceStatus").textContent = text;
-    }
-
-    function setNavText(text) {
-        document.getElementById("navText").textContent = text;
-    }
-
-    function setModeText(text) {
-        document.getElementById("modeText").textContent = text;
-    }
-
-    function setHazardText(text, mode = "normal") {
-        const hazardText = document.getElementById("hazardText");
-        hazardText.textContent = text;
-        hazardText.classList.remove("safe", "urgent");
-
-        if (mode === "safe") {
-            hazardText.classList.add("safe");
-        } else if (mode === "urgent") {
-            hazardText.classList.add("urgent");
-        }
-    }
-
-    function normaliseStepText(step) {
-        if (!step) return "Keep going straight.";
-
-        return step
-            .replace(/slight right/gi, "slightly right")
-            .replace(/slight left/gi, "slightly left")
-            .replace(/continue straight/gi, "keep going straight")
-            .replace(/continue/gi, "keep going")
-            .replace(/metres/gi, "meters")
-            .replace(/\s+/g, " ")
-            .trim();
-    }
-
-    function getUrlParams() {
-        return new URLSearchParams(window.location.search);
-    }
-
-    function getAutoStartConfig() {
-        const params = getUrlParams();
-        return {
-            autostart: params.get("autostart") === "1",
-            mode: (params.get("mode") || "").trim().toLowerCase(),
-            destination: (params.get("destination") || "").trim()
-        };
-    }
-
-    function getCurrentLocationPromise() {
-        return new Promise((resolve, reject) => {
-            if (!navigator.geolocation) {
-                reject(new Error("Geolocation is not supported in this browser."));
-                return;
-            }
-
-            navigator.geolocation.getCurrentPosition(
-                resolve,
-                reject,
-                {
-                    enableHighAccuracy: true,
-                    timeout: 10000,
-                    maximumAge: 0
-                }
-            );
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
         });
-    }
+    });
+}
 
-    async function startBackCamera() {
-        const video = document.getElementById("cameraFeed");
+async function startBackCamera() {
+    const video = byId("cameraFeed");
+    if (!video) return false;
 
-        if (cameraStream) return true;
+    if (cameraStream) return true;
 
+    try {
+        cameraStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                facingMode: { ideal: "environment" },
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            },
+            audio: false
+        });
+
+        video.srcObject = cameraStream;
+        return true;
+    } catch (error) {
         try {
             cameraStream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    facingMode: { ideal: "environment" },
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
-                },
+                video: true,
                 audio: false
             });
 
             video.srcObject = cameraStream;
             return true;
-        } catch (error) {
-            try {
-                cameraStream = await navigator.mediaDevices.getUserMedia({
-                    video: true,
-                    audio: false
-                });
-
-                video.srcObject = cameraStream;
-                return true;
-            } catch (fallbackError) {
-                setHazardText("Could not access camera", "urgent");
-                return false;
-            }
+        } catch (fallbackError) {
+            setHazardText("Could not access camera", "urgent");
+            return false;
         }
     }
+}
 
-    function stopCamera() {
-        if (cameraStream) {
-            cameraStream.getTracks().forEach(track => track.stop());
-            cameraStream = null;
-        }
+function stopCamera() {
+    if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+        cameraStream = null;
+    }
 
-        const video = document.getElementById("cameraFeed");
-        video.srcObject = null;
+    const video = byId("cameraFeed");
+    if (video) video.srcObject = null;
 
-        const overlay = document.getElementById("overlayCanvas");
+    const overlay = byId("overlayCanvas");
+    if (overlay) {
         const ctx = overlay.getContext("2d");
         ctx.clearRect(0, 0, overlay.width, overlay.height);
     }
+}
 
-    function syncOverlaySize() {
-        const video = document.getElementById("cameraFeed");
-        const overlay = document.getElementById("overlayCanvas");
-        const rect = video.getBoundingClientRect();
-        overlay.width = rect.width;
-        overlay.height = rect.height;
+function syncOverlaySize() {
+    const video = byId("cameraFeed");
+    const overlay = byId("overlayCanvas");
+    if (!video || !overlay) return;
+
+    const rect = video.getBoundingClientRect();
+    overlay.width = rect.width;
+    overlay.height = rect.height;
+}
+
+function getBoxColor(severity) {
+    if (severity === "urgent") return "#ff4d4f";
+    if (severity === "warning") return "#ffd43b";
+    return "#8ce99a";
+}
+
+function humanDirection(directionLabel) {
+    if (directionLabel === "left") return "left side";
+    if (directionLabel === "right") return "right side";
+    return "ahead";
+}
+
+function humanDistance(distanceLabel) {
+    if (distanceLabel === "very_close") return "very close";
+    if (distanceLabel === "close") return "close";
+    if (distanceLabel === "far") return "far ahead";
+    return "ahead";
+}
+
+function buildSmarterHazardMessage(data) {
+    const rawType = (data.hazard_type || data.message || "hazard").replaceAll("_", " ");
+    const type = rawType.charAt(0).toUpperCase() + rawType.slice(1);
+    const direction = humanDirection(data.direction_label);
+    const distance = humanDistance(data.distance_label);
+
+    if (data.direction_label === "center" || !data.direction_label) {
+        return `Careful. ${type} ${distance}.`;
     }
 
-    function getBoxColor(severity) {
-        if (severity === "urgent") return "#ff4d4f";
-        if (severity === "warning") return "#ffd43b";
-        return "#8ce99a";
-    }
+    return `Careful. ${type} ${distance}, on your ${direction}.`;
+}
 
-    function humanDirection(directionLabel) {
-        if (directionLabel === "left") return "left side";
-        if (directionLabel === "right") return "right side";
-        return "ahead";
-    }
+function drawDetections(detections) {
+    const video = byId("cameraFeed");
+    const overlay = byId("overlayCanvas");
+    if (!video || !overlay) return;
 
-    function humanDistance(distanceLabel) {
-        if (distanceLabel === "very_close") return "very close";
-        if (distanceLabel === "close") return "close";
-        if (distanceLabel === "far") return "far ahead";
-        return "ahead";
-    }
+    const ctx = overlay.getContext("2d");
 
-    function buildSmarterHazardMessage(data) {
-        const rawType = (data.hazard_type || "hazard").replaceAll("_", " ");
-        const type = rawType.charAt(0).toUpperCase() + rawType.slice(1);
-        const direction = humanDirection(data.direction_label);
-        const distance = humanDistance(data.distance_label);
+    if (!video.videoWidth || !video.videoHeight) return;
 
-        if (data.direction_label === "center") {
-            return `Careful. ${type} ${distance}.`;
-        }
+    syncOverlaySize();
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+    ctx.lineWidth = 3;
+    ctx.font = "bold 14px Arial";
 
-        return `Careful. ${type} ${distance}, on your ${direction}.`;
-    }
+    const sourceWidth = detectionFrameWidth || video.videoWidth;
+    const sourceHeight = detectionFrameHeight || video.videoHeight;
 
-    function drawDetections(detections) {
-        const video = document.getElementById("cameraFeed");
-        const overlay = document.getElementById("overlayCanvas");
-        const ctx = overlay.getContext("2d");
+    const scaleX = overlay.width / sourceWidth;
+    const scaleY = overlay.height / sourceHeight;
 
-        if (!video.videoWidth || !video.videoHeight) return;
+    detections.forEach((item) => {
+        if (!item.bbox) return;
 
-        syncOverlaySize();
-        ctx.clearRect(0, 0, overlay.width, overlay.height);
-        ctx.lineWidth = 3;
-        ctx.font = "bold 14px Arial";
+        const x1 = item.bbox.x1 * scaleX;
+        const y1 = item.bbox.y1 * scaleY;
+        const x2 = item.bbox.x2 * scaleX;
+        const y2 = item.bbox.y2 * scaleY;
 
-        const sourceWidth = detectionFrameWidth || video.videoWidth;
-        const sourceHeight = detectionFrameHeight || video.videoHeight;
+        const width = x2 - x1;
+        const height = y2 - y1;
+        const color = getBoxColor(item.severity);
 
-        const scaleX = overlay.width / sourceWidth;
-        const scaleY = overlay.height / sourceHeight;
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        ctx.strokeRect(x1, y1, width, height);
 
-        detections.forEach((item) => {
-            if (!item.bbox) return;
+        const label = [
+            item.hazard_type ? item.hazard_type.replaceAll("_", " ") : "",
+            item.distance_label || "",
+            item.direction_label || ""
+        ].filter(Boolean).join(" • ");
 
-            const x1 = item.bbox.x1 * scaleX;
-            const y1 = item.bbox.y1 * scaleY;
-            const x2 = item.bbox.x2 * scaleX;
-            const y2 = item.bbox.y2 * scaleY;
+        const textWidth = ctx.measureText(label).width + 12;
+        const textY = Math.max(24, y1 - 8);
 
-            const width = x2 - x1;
-            const height = y2 - y1;
-            const color = getBoxColor(item.severity);
+        ctx.fillRect(x1, textY - 22, textWidth, 24);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(label, x1 + 6, textY - 5);
+    });
+}
 
-            ctx.strokeStyle = color;
-            ctx.fillStyle = color;
-            ctx.strokeRect(x1, y1, width, height);
+async function captureAndDetectHazard() {
+    if (!hazardMonitoringActive || detectionBusy) return;
 
-            const label = [
-                item.hazard_type ? item.hazard_type.replaceAll("_", " ") : "",
-                item.distance_label || "",
-                item.direction_label || ""
-            ].filter(Boolean).join(" • ");
+    const video = byId("cameraFeed");
+    if (!video || !video.videoWidth || !video.videoHeight) return;
 
-            const textWidth = ctx.measureText(label).width + 12;
-            const textY = Math.max(24, y1 - 8);
+    detectionBusy = true;
 
-            ctx.fillRect(x1, textY - 22, textWidth, 24);
-            ctx.fillStyle = "#ffffff";
-            ctx.fillText(label, x1 + 6, textY - 5);
+    try {
+        const sourceWidth = video.videoWidth;
+        const sourceHeight = video.videoHeight;
+
+        const scale = Math.min(1, DETECTION_FRAME_MAX_WIDTH / sourceWidth);
+        const targetWidth = Math.round(sourceWidth * scale);
+        const targetHeight = Math.round(sourceHeight * scale);
+
+        detectionFrameWidth = targetWidth;
+        detectionFrameHeight = targetHeight;
+
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+        ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
+
+        const frameData = canvas.toDataURL("image/jpeg", DETECTION_JPEG_QUALITY);
+
+        const response = await fetch("/detect-hazard", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ frame: frameData })
         });
-    }
 
-    async function captureAndDetectHazard() {
-        if (!hazardMonitoringActive || detectionBusy) return;
+        const data = await response.json();
 
-        const video = document.getElementById("cameraFeed");
-        if (!video.videoWidth || !video.videoHeight) return;
-
-        detectionBusy = true;
-
-        try {
-            const sourceWidth = video.videoWidth;
-            const sourceHeight = video.videoHeight;
-
-            const scale = Math.min(1, DETECTION_FRAME_MAX_WIDTH / sourceWidth);
-            const targetWidth = Math.round(sourceWidth * scale);
-            const targetHeight = Math.round(sourceHeight * scale);
-
-            detectionFrameWidth = targetWidth;
-            detectionFrameHeight = targetHeight;
-
-            const canvas = document.createElement("canvas");
-            const ctx = canvas.getContext("2d");
-
-            canvas.width = targetWidth;
-            canvas.height = targetHeight;
-            ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
-
-            const frameData = canvas.toDataURL("image/jpeg", DETECTION_JPEG_QUALITY);
-
-            const response = await fetch("/detect-hazard", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ frame: frameData })
-            });
-
-            const data = await response.json();
-
-            if (!data.success) {
-                setHazardText("Hazard detection unavailable", "urgent");
-                return;
-            }
-
-            drawDetections(data.detections || []);
-
-            if (data.hazard_detected) {
-                const smartMessage = buildSmarterHazardMessage(data);
-
-                setHazardText(
-                    smartMessage,
-                    data.severity === "urgent" ? "urgent" : "normal"
-                );
-
-                speakHazard(
-                    smartMessage,
-                    true,
-                    data.severity,
-                    data.distance_label,
-                    data.direction_label
-                );
-            } else {
-                setHazardText("No hazard detected", "safe");
-            }
-        } catch (error) {
-            setHazardText("Hazard detection error", "urgent");
-        } finally {
-            detectionBusy = false;
+        if (!data.success) {
+            setHazardText("Hazard detection unavailable", "urgent");
+            return;
         }
+
+        drawDetections(data.detections || []);
+
+        if (data.hazard_detected) {
+            const smartMessage = buildSmarterHazardMessage(data);
+
+            setHazardText(
+                smartMessage,
+                data.severity === "urgent" ? "urgent" : "normal"
+            );
+
+            speakHazard(
+                smartMessage,
+                true,
+                data.severity,
+                data.distance_label
+            );
+        } else {
+            setHazardText("No hazard detected", "safe");
+
+            const overlay = byId("overlayCanvas");
+            if (overlay) {
+                const ctx = overlay.getContext("2d");
+                ctx.clearRect(0, 0, overlay.width, overlay.height);
+            }
+        }
+    } catch (error) {
+        setHazardText("Hazard detection error", "urgent");
+    } finally {
+        detectionBusy = false;
     }
+}
 
-    async function startHazardMonitoring() {
-        const cameraReady = await startBackCamera();
-        if (!cameraReady) return false;
+async function startHazardMonitoring() {
+    const cameraReady = await startBackCamera();
+    if (!cameraReady) return false;
 
-        hazardMonitoringActive = true;
-        setHazardText("Hazard monitoring active", "safe");
+    hazardMonitoringActive = true;
+    setHazardText("Hazard monitoring active", "safe");
 
-        const video = document.getElementById("cameraFeed");
+    const video = byId("cameraFeed");
+    if (video) {
         video.onloadedmetadata = () => {
             syncOverlaySize();
         };
+    }
 
-        if (hazardInterval) {
-            clearInterval(hazardInterval);
+    if (hazardInterval) {
+        clearInterval(hazardInterval);
+    }
+
+    hazardInterval = setInterval(captureAndDetectHazard, DETECTION_INTERVAL_MS);
+    return true;
+}
+
+function stopHazardMonitoring() {
+    hazardMonitoringActive = false;
+
+    if (hazardInterval) {
+        clearInterval(hazardInterval);
+        hazardInterval = null;
+    }
+
+    setHazardText("Hazard monitoring stopped", "safe");
+}
+
+function hideIndoorPanel() {
+    const panel = byId("indoorPanel");
+    if (panel) panel.classList.add("hidden");
+}
+
+function showIndoorPanel() {
+    const panel = byId("indoorPanel");
+    if (panel) panel.classList.remove("hidden");
+}
+
+function hideRouteSummary() {
+    const panel = byId("routeSummary");
+    if (!panel) return;
+
+    panel.classList.add("hidden");
+    panel.innerHTML = "";
+}
+
+function showRouteSummary(html) {
+    const panel = byId("routeSummary");
+    if (!panel) return;
+
+    panel.classList.remove("hidden");
+    panel.innerHTML = html;
+}
+
+function startVoiceRecognition() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+        setVoiceStatus("Voice recognition not supported on this device.");
+        speakGuidance("Voice recognition is not supported on this device.", true);
+        return;
+    }
+
+    if (recognitionActive) return;
+
+    recognition = new SpeechRecognition();
+    recognition.lang = "en-AU";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.continuous = true;
+
+    recognitionActive = true;
+    voiceAssistantActive = true;
+    manualStop = false;
+    setVoiceStatus("Listening. Where do you want to go?");
+
+    recognition.onresult = async function(event) {
+        const lastResult = event.results[event.results.length - 1];
+        const transcript = lastResult[0].transcript.toLowerCase().trim();
+        setVoiceStatus(`Heard: ${transcript}`);
+        await handleVoiceCommand(transcript);
+    };
+
+    recognition.onerror = function() {
+        recognitionActive = false;
+    };
+
+    recognition.onend = function() {
+        recognitionActive = false;
+
+        if (voiceAssistantActive && !manualStop) {
+            setTimeout(() => {
+                if (!recognitionActive && voiceAssistantActive && !manualStop) {
+                    startVoiceRecognition();
+                }
+            }, 800);
+        }
+    };
+
+    try {
+        recognition.start();
+    } catch (error) {
+        recognitionActive = false;
+        setVoiceStatus("Microphone could not start. Tap Start Voice Navigation and try again.");
+    }
+}
+
+async function handleVoiceCommand(transcript) {
+    if (
+        transcript.includes("stop everything") ||
+        transcript.includes("stop all") ||
+        transcript.includes("end everything")
+    ) {
+        stopAll();
+        speakGuidance("Stopped.", true);
+        return;
+    }
+
+    if (
+        transcript.includes("stop navigation") ||
+        transcript.includes("cancel navigation") ||
+        transcript.includes("end navigation") ||
+        transcript === "stop" ||
+        transcript === "cancel"
+    ) {
+        stopNavigationOnly();
+        speakGuidance("Navigation stopped.", true);
+        return;
+    }
+
+    if (transcript.includes("repeat instruction") || transcript.includes("repeat")) {
+        repeatCurrentInstruction();
+        return;
+    }
+
+    if (transcript.includes("reset voice assistant")) {
+        resetVoiceAssistant();
+        return;
+    }
+
+    if (transcript.includes("indoor navigation") || transcript === "indoor") {
+        activateIndoorMode(true);
+        return;
+    }
+
+    if (transcript.includes("outdoor navigation") || transcript === "outdoor") {
+        currentMode = "outdoor";
+        setModeText("Outdoor navigation");
+        hideIndoorPanel();
+        setNavText("Tell me where you want to go.");
+        setVoiceStatus("Outdoor navigation ready. Tell me where you want to go.");
+        speakGuidance("Alright. Where do you want to go?", true);
+        return;
+    }
+
+    if (transcript.startsWith("take me to") || transcript.startsWith("navigate to")) {
+        currentMode = "outdoor";
+        setModeText("Outdoor navigation");
+        hideIndoorPanel();
+
+        currentDestination = transcript
+            .replace(/^take me to\s+/i, "")
+            .replace(/^navigate to\s+/i, "")
+            .trim();
+
+        if (!currentDestination) {
+            speakGuidance("I did not catch the destination. Please say it again.", true);
+            return;
         }
 
-        hazardInterval = setInterval(captureAndDetectHazard, DETECTION_INTERVAL_MS);
+        await startOutdoorNavigation();
+        return;
+    }
+
+    if (!routeActive) {
+        speakGuidance("Please say indoor navigation, or say take me to your destination.", true);
+    }
+}
+
+function stopVoiceRecognition() {
+    manualStop = true;
+    voiceAssistantActive = false;
+
+    if (recognition) {
+        try {
+            recognition.stop();
+        } catch (error) {}
+    }
+
+    recognitionActive = false;
+}
+
+function stopTracking() {
+    if (trackingWatchId !== null) {
+        navigator.geolocation.clearWatch(trackingWatchId);
+        trackingWatchId = null;
+    }
+}
+
+function stopNavigationOnly() {
+    stopTracking();
+    routeActive = false;
+    currentDestination = "";
+    outdoorSteps = [];
+    outdoorStepData = [];
+    currentStepIndex = 0;
+    destinationCoords = null;
+    arrivedAnnounced = false;
+    hideRouteSummary();
+    setModeText("Waiting for destination");
+    setNavText("Navigation stopped. Say take me to your destination when ready.");
+    setVoiceStatus("Navigation stopped. Voice assistant is still listening.");
+
+    if ("speechSynthesis" in window) {
+        speechSynthesis.cancel();
+    }
+
+    vibrate([100, 60, 100]);
+}
+
+function resetVoiceAssistant() {
+    stopTracking();
+    routeActive = false;
+    currentMode = "";
+    currentDestination = "";
+    outdoorSteps = [];
+    outdoorStepData = [];
+    currentStepIndex = 0;
+    destinationCoords = null;
+    arrivedAnnounced = false;
+    hideRouteSummary();
+    hideIndoorPanel();
+    setModeText("Waiting for destination");
+    setNavText("Say indoor navigation or take me to your destination.");
+    setVoiceStatus("Voice assistant reset. Listening.");
+
+    if ("speechSynthesis" in window) {
+        speechSynthesis.cancel();
+    }
+
+    vibrate([80]);
+}
+
+function stopAll() {
+    stopVoiceRecognition();
+    stopTracking();
+    stopHazardMonitoring();
+    stopCamera();
+
+    routeActive = false;
+    currentMode = "";
+    currentDestination = "";
+    outdoorSteps = [];
+    outdoorStepData = [];
+    currentStepIndex = 0;
+    destinationCoords = null;
+    arrivedAnnounced = false;
+
+    setVoiceStatus("Stopped.");
+    setModeText("Waiting for destination");
+    setNavText("Stopped.");
+    setHazardText("No hazard detected", "safe");
+    hideRouteSummary();
+    hideIndoorPanel();
+
+    if ("speechSynthesis" in window) {
+        speechSynthesis.cancel();
+    }
+
+    vibrate([160, 80, 160]);
+}
+
+function toRadians(value) {
+    return value * Math.PI / 180;
+}
+
+function haversineDistanceMeters(lat1, lon1, lat2, lon2) {
+    const earthRadius = 6371000;
+    const dLat = toRadians(lat2 - lat1);
+    const dLon = toRadians(lon2 - lon1);
+
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return earthRadius * c;
+}
+
+function getStepDistanceFromUser(userLat, userLon, stepIndex) {
+    const step = outdoorStepData[stepIndex];
+
+    if (!step || step.lat === null || step.lon === null || step.lat === undefined || step.lon === undefined) {
+        return Infinity;
+    }
+
+    return haversineDistanceMeters(userLat, userLon, step.lat, step.lon);
+}
+
+function getDestinationDistanceFromUser(userLat, userLon) {
+    if (!destinationCoords || destinationCoords.lat == null || destinationCoords.lon == null) {
+        return Infinity;
+    }
+
+    return haversineDistanceMeters(userLat, userLon, destinationCoords.lat, destinationCoords.lon);
+}
+
+function findBestCurrentStepIndex(userLat, userLon) {
+    if (!outdoorStepData.length) return currentStepIndex;
+
+    let bestIndex = currentStepIndex;
+    let bestDistance = Infinity;
+
+    const searchStart = Math.max(0, currentStepIndex);
+    const searchEnd = Math.min(outdoorStepData.length - 1, currentStepIndex + 4);
+
+    for (let i = searchStart; i <= searchEnd; i++) {
+        const step = outdoorStepData[i];
+
+        if (!step || step.maneuver_type === "arrive") continue;
+
+        const distance = getStepDistanceFromUser(userLat, userLon, i);
+
+        if (distance < bestDistance) {
+            bestDistance = distance;
+            bestIndex = i;
+        }
+    }
+
+    return bestIndex;
+}
+
+function buildLiveInstruction(step, distanceToStep, destinationDistance = null) {
+    if (!step) return "Keep going straight.";
+
+    if (step.maneuver_type === "arrive") {
+        return "You have arrived.";
+    }
+
+    const modifier = (step.modifier || "").replaceAll("_", " ").trim().toLowerCase();
+    const street = (step.street_name || "").trim();
+
+    if (destinationDistance !== null && destinationDistance <= DESTINATION_ARRIVAL_THRESHOLD_M + 8) {
+        return "You are almost there. Keep going.";
+    }
+
+    if (distanceToStep <= NOW_TURN_DISTANCE_M) {
+        if (step.maneuver_type === "turn" && modifier) {
+            return street ? `Turn ${modifier} now onto ${street}.` : `Turn ${modifier} now.`;
+        }
+
+        if (step.maneuver_type === "fork" && modifier) {
+            return `Keep ${modifier} now.`;
+        }
+
+        if (step.maneuver_type === "merge" && modifier) {
+            return `Merge ${modifier} now.`;
+        }
+
+        if (step.maneuver_type === "depart") {
+            return street ? `Start walking on ${street}.` : `Start walking now.`;
+        }
+
+        return normaliseStepText(step.instruction);
+    }
+
+    if (distanceToStep <= APPROACH_DISTANCE_M) {
+        if (step.maneuver_type === "turn" && modifier) {
+            return street
+                ? `In ${Math.round(distanceToStep)} meters, turn ${modifier} onto ${street}.`
+                : `In ${Math.round(distanceToStep)} meters, turn ${modifier}.`;
+        }
+
+        if (step.maneuver_type === "fork" && modifier) {
+            return `In ${Math.round(distanceToStep)} meters, keep ${modifier}.`;
+        }
+
+        if (step.maneuver_type === "merge" && modifier) {
+            return `In ${Math.round(distanceToStep)} meters, merge ${modifier}.`;
+        }
+    }
+
+    return street ? `Keep going on ${street}.` : "Keep going straight.";
+}
+
+function maybeVibrateForTurn(instruction, speechKey) {
+    const lower = instruction.toLowerCase();
+
+    if (
+        speechKey !== lastTurnVibrationKey &&
+        (lower.includes("turn") || lower.includes("keep") || lower.includes("merge")) &&
+        lower.includes("now")
+    ) {
+        lastTurnVibrationKey = speechKey;
+        vibrate([100, 50, 100]);
+    }
+}
+
+function shouldSpeakGuidance(key, force = false) {
+    const now = Date.now();
+
+    if (force) {
+        lastGuidanceSpeechKey = key;
+        lastGuidanceSpeechTime = now;
         return true;
     }
 
-    function stopHazardMonitoring() {
-        hazardMonitoringActive = false;
+    if (key !== lastGuidanceSpeechKey) {
+        lastGuidanceSpeechKey = key;
+        lastGuidanceSpeechTime = now;
+        return true;
+    }
 
-        if (hazardInterval) {
-            clearInterval(hazardInterval);
-            hazardInterval = null;
+    if (now - lastGuidanceSpeechTime >= GUIDANCE_COOLDOWN_MS) {
+        lastGuidanceSpeechTime = now;
+        return true;
+    }
+
+    return false;
+}
+
+function activateIndoorMode(announce = false) {
+    currentMode = "indoor";
+    routeActive = false;
+    currentDestination = "";
+    stopTracking();
+    hideRouteSummary();
+    showIndoorPanel();
+    setModeText("Indoor navigation");
+    setNavText("Indoor navigation is ready. Choose your start and destination.");
+    setVoiceStatus("Indoor navigation selected.");
+
+    if (announce) {
+        speakGuidance("Indoor navigation is ready. Choose your start and destination.", true);
+    }
+}
+
+async function startOutdoorNavigation() {
+    try {
+        routeActive = true;
+        setModeText("Outdoor navigation");
+        setNavText("Getting your route.");
+        setVoiceStatus(`Getting route to ${currentDestination}.`);
+        speakGuidance(`Getting your route to ${currentDestination}.`, true);
+
+        const monitoringReady = await startHazardMonitoring();
+
+        if (monitoringReady) {
+            setHazardText("Hazard monitoring active", "safe");
         }
 
-        setHazardText("Hazard monitoring stopped", "safe");
-    }
+        const position = await getCurrentLocationPromise();
 
-    function hideIndoorPanel() {
-        document.getElementById("indoorPanel").classList.add("hidden");
-    }
+        const response = await fetch("/outdoor-navigate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                start_lat: position.coords.latitude,
+                start_lon: position.coords.longitude,
+                destination: currentDestination
+            })
+        });
 
-    function showIndoorPanel() {
-        document.getElementById("indoorPanel").classList.remove("hidden");
-    }
+        const data = await response.json();
 
-    function hideRouteSummary() {
-        document.getElementById("routeSummary").classList.add("hidden");
-        document.getElementById("routeSummary").innerHTML = "";
-    }
-
-    function showRouteSummary(html) {
-        const panel = document.getElementById("routeSummary");
-        panel.classList.remove("hidden");
-        panel.innerHTML = html;
-    }
-
-    function startVoiceRecognition() {
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-        if (!SpeechRecognition) {
-            setVoiceStatus("Voice recognition not supported on this device.");
-            speakGuidance("Voice recognition is not supported on this device.", true);
+        if (!data.success) {
+            routeActive = false;
+            setNavText("Could not get route.");
+            setVoiceStatus(data.message || "Route error.");
+            speakGuidance(data.message || "I could not get the route.", true);
+            currentDestination = "";
             return;
         }
 
-        if (recognitionActive) return;
-
-        recognition = new SpeechRecognition();
-        recognition.lang = "en-AU";
-        recognition.interimResults = false;
-        recognition.maxAlternatives = 1;
-        recognition.continuous = true;
-
-        recognitionActive = true;
-        voiceAssistantActive = true;
-        manualStop = false;
-        setVoiceStatus("Listening. Where do you want to go?");
-
-        try {
-            recognition.start();
-        } catch (error) {
-            recognitionActive = false;
-            setVoiceStatus("Microphone could not start. Tap Start Voice Navigation and try again.");
-            return;
-        }
-
-        recognition.onresult = async function(event) {
-            const lastResult = event.results[event.results.length - 1];
-            const transcript = lastResult[0].transcript.toLowerCase().trim();
-            setVoiceStatus(`Heard: ${transcript}`);
-            await handleVoiceCommand(transcript);
-        };
-
-        recognition.onerror = function() {
-            recognitionActive = false;
-        };
-
-        recognition.onend = function() {
-            recognitionActive = false;
-
-            if (voiceAssistantActive && !manualStop) {
-                setTimeout(() => {
-                    if (!recognitionActive && voiceAssistantActive && !manualStop) {
-                        startVoiceRecognition();
-                    }
-                }, 700);
-            }
-        };
-    }
-
-    async function handleVoiceCommand(transcript) {
-        if (
-            transcript.includes("stop everything") ||
-            transcript.includes("stop all") ||
-            transcript.includes("end everything")
-        ) {
-            stopAll();
-            speakGuidance("Stopped.", true);
-            return;
-        }
-
-        if (
-            transcript.includes("stop navigation") ||
-            transcript.includes("cancel navigation") ||
-            transcript.includes("end navigation") ||
-            transcript === "stop" ||
-            transcript === "cancel"
-        ) {
-            stopNavigationOnly();
-            speakGuidance("Navigation stopped.", true);
-            return;
-        }
-
-        if (transcript.includes("repeat instruction") || transcript.includes("repeat")) {
-            repeatCurrentInstruction();
-            return;
-        }
-
-        if (transcript.includes("reset voice assistant")) {
-            resetVoiceAssistant();
-            return;
-        }
-
-        if (transcript.includes("indoor navigation")) {
-            activateIndoorMode(true);
-            return;
-        }
-
-        if (transcript.includes("outdoor navigation")) {
-            currentMode = "outdoor";
-            setModeText("Outdoor navigation");
-            hideIndoorPanel();
-            setNavText("Tell me where you want to go.");
-            setVoiceStatus("Outdoor navigation ready. Tell me where you want to go.");
-            speakGuidance("Alright. Where do you want to go?", true);
-            return;
-        }
-
-        if (transcript.startsWith("take me to") || transcript.startsWith("navigate to")) {
-            currentMode = "outdoor";
-            setModeText("Outdoor navigation");
-            hideIndoorPanel();
-
-            currentDestination = transcript
-                .replace(/^take me to\s+/i, "")
-                .replace(/^navigate to\s+/i, "")
-                .trim();
-
-            if (!currentDestination) {
-                speakGuidance("I did not catch the destination. Please say it again.", true);
-                return;
-            }
-
-            await startOutdoorNavigation();
-            return;
-        }
-
-        if (!routeActive) {
-            speakGuidance("Please say indoor navigation, or say take me to your destination.", true);
-        }
-    }
-
-    function stopVoiceRecognition() {
-        manualStop = true;
-        voiceAssistantActive = false;
-
-        if (recognition) {
-            try {
-                recognition.stop();
-            } catch (error) {}
-        }
-
-        recognitionActive = false;
-    }
-
-    function stopTracking() {
-        if (trackingWatchId !== null) {
-            navigator.geolocation.clearWatch(trackingWatchId);
-            trackingWatchId = null;
-        }
-    }
-
-    function stopNavigationOnly() {
-        stopTracking();
-        routeActive = false;
-        currentDestination = "";
-        outdoorSteps = [];
-        outdoorStepData = [];
+        outdoorSteps = data.steps || [];
+        outdoorStepData = data.step_data || [];
         currentStepIndex = 0;
-        destinationCoords = null;
+        destinationCoords = data.destination || null;
         arrivedAnnounced = false;
-        hideRouteSummary();
-        setModeText("Waiting for destination");
-        setNavText("Navigation stopped. Say take me to your destination when ready.");
-        setVoiceStatus("Navigation stopped. Voice assistant is still listening.");
-        speechSynthesis.cancel();
-        vibrate([100, 60, 100]);
+
+        showRouteSummary(`
+            <strong>Destination:</strong> ${data.destination_name || currentDestination}<br>
+            <strong>Distance:</strong> ${data.distance_m || "Unknown"} metres<br>
+            <strong>Estimated Time:</strong> ${data.duration_min || "Unknown"} minutes
+        `);
+
+        if (outdoorSteps.length) {
+            const firstStep = normaliseStepText(outdoorSteps[0]);
+            setNavText(firstStep);
+            setVoiceStatus(`Route ready to ${data.destination_name || currentDestination}.`);
+            speakGuidance(`Route ready. ${firstStep}`, true);
+            vibrate([120]);
+            startStepTracking();
+        } else {
+            routeActive = false;
+            setNavText("Route ready.");
+            speakGuidance("Route ready.", true);
+        }
+    } catch (error) {
+        routeActive = false;
+        setNavText("Navigation error.");
+        setVoiceStatus("Could not start navigation.");
+        speakGuidance("I could not start navigation.", true);
+        currentDestination = "";
+    }
+}
+
+async function startIndoorNavigation() {
+    const building = byId("buildingSelect")?.value || "torrens";
+    const start = byId("indoorStart")?.value || "";
+    const destination = byId("indoorDestination")?.value || "";
+
+    if (!start || !destination) {
+        speakGuidance("Please enter your indoor start and destination.", true);
+        setNavText("Please enter your indoor start and destination.");
+        return;
     }
 
-    function resetVoiceAssistant() {
-        stopTracking();
+    try {
+        routeActive = true;
+        setNavText("Building indoor route.");
+        setModeText("Indoor navigation");
+        speakGuidance("Building your indoor route.", true);
+
+        const response = await fetch("/navigate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ building, start, destination })
+        });
+
+        const data = await response.json();
+
+        if (!data.success) {
+            routeActive = false;
+            setNavText(data.message || "Indoor route failed.");
+            speakGuidance(data.message || "Indoor route failed.", true);
+            return;
+        }
+
+        if (data.steps && data.steps.length) {
+            const firstStep = normaliseStepText(data.steps[0]);
+            setNavText(firstStep);
+            showRouteSummary(
+                `<strong>Indoor route ready.</strong><br>${data.steps.map(step => `• ${step}`).join("<br>")}`
+            );
+            speakGuidance(`Indoor route ready. ${firstStep}`, true);
+        } else {
+            setNavText("Indoor route ready.");
+            speakGuidance("Indoor route ready.", true);
+        }
+    } catch (error) {
         routeActive = false;
-        currentMode = "";
-        currentDestination = "";
-        outdoorSteps = [];
-        outdoorStepData = [];
-        currentStepIndex = 0;
-        destinationCoords = null;
-        arrivedAnnounced = false;
-        hideRouteSummary();
-        hideIndoorPanel();
-        setModeText("Waiting for destination");
-        setNavText("Say indoor navigation or take me to your destination.");
-        setVoiceStatus("Voice assistant reset. Listening.");
-        speechSynthesis.cancel();
+        setNavText("Indoor navigation error.");
+        speakGuidance("There was a problem starting indoor navigation.", true);
+    }
+}
+
+function startStepTracking() {
+    stopTracking();
+
+    if (!navigator.geolocation) {
+        setVoiceStatus("Location tracking is not supported.");
+        return;
+    }
+
+    trackingWatchId = navigator.geolocation.watchPosition(
+        function(position) {
+            handleLiveTracking(position);
+        },
+        function() {
+            setVoiceStatus("Location tracking error.");
+        },
+        {
+            enableHighAccuracy: true,
+            maximumAge: 2000,
+            timeout: 10000
+        }
+    );
+}
+
+function handleLiveTracking(position) {
+    if (!outdoorSteps.length || !outdoorStepData.length) return;
+
+    const userLat = position.coords.latitude;
+    const userLon = position.coords.longitude;
+    const destinationDistance = getDestinationDistanceFromUser(userLat, userLon);
+
+    if (destinationDistance <= DESTINATION_ARRIVAL_THRESHOLD_M) {
+        if (!arrivedAnnounced) {
+            arrivedAnnounced = true;
+            routeActive = false;
+            setModeText("Arrival reached");
+            setNavText("You have arrived.");
+            setVoiceStatus("You have arrived.");
+            speakGuidance("You have arrived.", true);
+            vibrate([200, 80, 200]);
+        }
+
+        stopTracking();
+        return;
+    }
+
+    const bestIndex = findBestCurrentStepIndex(userLat, userLon);
+
+    if (bestIndex > currentStepIndex) {
+        currentStepIndex = bestIndex;
+    }
+
+    const currentStep = outdoorStepData[currentStepIndex];
+    if (!currentStep) return;
+
+    const distanceToStep = getStepDistanceFromUser(userLat, userLon, currentStepIndex);
+    const liveInstruction = buildLiveInstruction(currentStep, distanceToStep, destinationDistance);
+
+    setNavText(liveInstruction);
+
+    const speechKey =
+        `${currentStepIndex}|${Math.round(distanceToStep / 4)}|${Math.round(destinationDistance / 5)}|${liveInstruction}`;
+
+    maybeVibrateForTurn(liveInstruction, speechKey);
+
+    if (distanceToStep <= STEP_REACHED_THRESHOLD_M && currentStepIndex < outdoorStepData.length - 1) {
+        currentStepIndex += 1;
+
+        const nextStep = outdoorStepData[currentStepIndex];
+
+        if (nextStep) {
+            const nextDistance = getStepDistanceFromUser(userLat, userLon, currentStepIndex);
+            const nextInstruction = buildLiveInstruction(nextStep, nextDistance, destinationDistance);
+            setNavText(nextInstruction);
+
+            const nextKey = `next|${currentStepIndex}|${Math.round(nextDistance / 4)}|${nextInstruction}`;
+
+            if (shouldSpeakGuidance(nextKey, true)) {
+                maybeVibrateForTurn(nextInstruction, nextKey);
+                speakGuidance(nextInstruction, true);
+            }
+        }
+
+        return;
+    }
+
+    if (shouldSpeakGuidance(speechKey, false)) {
+        speakGuidance(liveInstruction, false);
+    }
+}
+
+function repeatCurrentInstruction() {
+    const text = byId("navText")?.textContent || "";
+
+    if (text) {
+        speakGuidance(text, true);
         vibrate([80]);
     }
+}
 
-    function stopAll() {
-        stopVoiceRecognition();
-        stopTracking();
-        stopHazardMonitoring();
-        stopCamera();
-        routeActive = false;
-        currentMode = "";
-        currentDestination = "";
-        outdoorSteps = [];
-        outdoorStepData = [];
-        currentStepIndex = 0;
-        destinationCoords = null;
-        arrivedAnnounced = false;
-        setVoiceStatus("Stopped.");
-        setModeText("Waiting for destination");
-        setNavText("Stopped.");
-        setHazardText("No hazard detected", "safe");
-        hideRouteSummary();
-        hideIndoorPanel();
-        speechSynthesis.cancel();
-        vibrate([160, 80, 160]);
-    }
+async function startNavigation() {
+    setHazardText("No hazard detected", "safe");
+    setModeText("Waiting for destination");
+    setVoiceStatus("Welcome to NavGuid. Where do you want to go?");
+    setNavText("Say indoor navigation or take me to your destination.");
+    speakGuidance("Welcome to NavGuid. Where do you want to go?", true);
+    startVoiceRecognition();
+}
 
-    function toRadians(value) {
-        return value * Math.PI / 180;
-    }
+function runIncomingVoiceFlowFromUrl() {
+    const config = getAutoStartConfig();
 
-    function haversineDistanceMeters(lat1, lon1, lat2, lon2) {
-        const earthRadius = 6371000;
-        const dLat = toRadians(lat2 - lat1);
-        const dLon = toRadians(lon2 - lon1);
+    if (!config.autostart) return;
 
-        const a =
-            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) *
-            Math.sin(dLon / 2) * Math.sin(dLon / 2);
-
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return earthRadius * c;
-    }
-
-    function getStepDistanceFromUser(userLat, userLon, stepIndex) {
-        const step = outdoorStepData[stepIndex];
-
-        if (!step || step.lat === null || step.lon === null || step.lat === undefined || step.lon === undefined) {
-            return Infinity;
-        }
-
-        return haversineDistanceMeters(userLat, userLon, step.lat, step.lon);
-    }
-
-    function getDestinationDistanceFromUser(userLat, userLon) {
-        if (!destinationCoords || destinationCoords.lat == null || destinationCoords.lon == null) {
-            return Infinity;
-        }
-
-        return haversineDistanceMeters(userLat, userLon, destinationCoords.lat, destinationCoords.lon);
-    }
-
-    function findBestCurrentStepIndex(userLat, userLon) {
-        if (!outdoorStepData.length) return currentStepIndex;
-
-        let bestIndex = currentStepIndex;
-        let bestDistance = Infinity;
-
-        const searchStart = Math.max(0, currentStepIndex);
-        const searchEnd = Math.min(outdoorStepData.length - 1, currentStepIndex + 4);
-
-        for (let i = searchStart; i <= searchEnd; i++) {
-            const step = outdoorStepData[i];
-
-            if (!step || step.maneuver_type === "arrive") continue;
-
-            const distance = getStepDistanceFromUser(userLat, userLon, i);
-
-            if (distance < bestDistance) {
-                bestDistance = distance;
-                bestIndex = i;
-            }
-        }
-
-        return bestIndex;
-    }
-
-    function buildLiveInstruction(step, distanceToStep, destinationDistance = null) {
-        if (!step) return "Keep going straight.";
-
-        if (step.maneuver_type === "arrive") {
-            return "You have arrived.";
-        }
-
-        const modifier = (step.modifier || "").replaceAll("_", " ").trim().toLowerCase();
-        const street = (step.street_name || "").trim();
-
-        if (destinationDistance !== null && destinationDistance <= DESTINATION_ARRIVAL_THRESHOLD_M + 8) {
-            return "You are almost there. Keep going.";
-        }
-
-        if (distanceToStep <= NOW_TURN_DISTANCE_M) {
-            if (step.maneuver_type === "turn" && modifier) {
-                return street
-                    ? `Turn ${modifier} now onto ${street}.`
-                    : `Turn ${modifier} now.`;
-            }
-
-            if (step.maneuver_type === "fork" && modifier) {
-                return `Keep ${modifier} now.`;
-            }
-
-            if (step.maneuver_type === "merge" && modifier) {
-                return `Merge ${modifier} now.`;
-            }
-
-            if (step.maneuver_type === "depart") {
-                return street
-                    ? `Start walking on ${street}.`
-                    : `Start walking now.`;
-            }
-
-            return normaliseStepText(step.instruction);
-        }
-
-        if (distanceToStep <= APPROACH_DISTANCE_M) {
-            if (step.maneuver_type === "turn" && modifier) {
-                return street
-                    ? `In ${Math.round(distanceToStep)} meters, turn ${modifier} onto ${street}.`
-                    : `In ${Math.round(distanceToStep)} meters, turn ${modifier}.`;
-            }
-
-            if (step.maneuver_type === "fork" && modifier) {
-                return `In ${Math.round(distanceToStep)} meters, keep ${modifier}.`;
-            }
-
-            if (step.maneuver_type === "merge" && modifier) {
-                return `In ${Math.round(distanceToStep)} meters, merge ${modifier}.`;
-            }
-        }
-
-        return street ? `Keep going on ${street}.` : "Keep going straight.";
-    }
-
-    function maybeVibrateForTurn(instruction, speechKey) {
-        const lower = instruction.toLowerCase();
-
-        if (
-            speechKey !== lastTurnVibrationKey &&
-            (lower.includes("turn") || lower.includes("keep") || lower.includes("merge")) &&
-            lower.includes("now")
-        ) {
-            lastTurnVibrationKey = speechKey;
-            vibrate([100, 50, 100]);
-        }
-    }
-
-    function shouldSpeakGuidance(key, force = false) {
-        const now = Date.now();
-
-        if (force) {
-            lastGuidanceSpeechKey = key;
-            lastGuidanceSpeechTime = now;
-            return true;
-        }
-
-        if (key !== lastGuidanceSpeechKey) {
-            lastGuidanceSpeechKey = key;
-            lastGuidanceSpeechTime = now;
-            return true;
-        }
-
-        if (now - lastGuidanceSpeechTime >= GUIDANCE_COOLDOWN_MS) {
-            lastGuidanceSpeechTime = now;
-            return true;
-        }
-
-        return false;
-    }
-
-    function activateIndoorMode(announce = false) {
-        currentMode = "indoor";
-        routeActive = false;
-        currentDestination = "";
-        stopTracking();
-        hideRouteSummary();
-        showIndoorPanel();
-        setModeText("Indoor navigation");
+    if (config.mode === "indoor") {
+        activateIndoorMode(false);
+        setVoiceStatus("Indoor navigation ready.");
         setNavText("Indoor navigation is ready. Choose your start and destination.");
-        setVoiceStatus("Indoor navigation selected.");
-
-        if (announce) {
-            speakGuidance("Indoor navigation is ready. Choose your start and destination.", true);
-        }
+        speakGuidance("Indoor navigation is ready.", true);
+        startVoiceRecognition();
+        return;
     }
 
-    async function startOutdoorNavigation() {
-        try {
-            routeActive = true;
-            setModeText("Outdoor navigation");
-            setNavText("Getting your route.");
-            setVoiceStatus(`Getting route to ${currentDestination}.`);
-            speakGuidance(`Getting your route to ${currentDestination}.`, true);
-
-            const monitoringReady = await startHazardMonitoring();
-
-            if (monitoringReady) {
-                setHazardText("Hazard monitoring active", "safe");
-            }
-
-            const position = await getCurrentLocationPromise();
-
-            const response = await fetch("/outdoor-navigate", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    start_lat: position.coords.latitude,
-                    start_lon: position.coords.longitude,
-                    destination: currentDestination
-                })
-            });
-
-            const data = await response.json();
-
-            if (!data.success) {
-                routeActive = false;
-                setNavText("Could not get route.");
-                setVoiceStatus(data.message || "Route error.");
-                speakGuidance(data.message || "I could not get the route.", true);
-                currentDestination = "";
-                return;
-            }
-
-            outdoorSteps = data.steps || [];
-            outdoorStepData = data.step_data || [];
-            currentStepIndex = 0;
-            destinationCoords = data.destination || null;
-            arrivedAnnounced = false;
-
-            showRouteSummary(`
-                <strong>Destination:</strong> ${data.destination_name || currentDestination}<br>
-                <strong>Distance:</strong> ${data.distance_m || "Unknown"} metres<br>
-                <strong>Estimated Time:</strong> ${data.duration_min || "Unknown"} minutes
-            `);
-
-            if (outdoorSteps.length) {
-                const firstStep = normaliseStepText(outdoorSteps[0]);
-                setNavText(firstStep);
-                setVoiceStatus(`Route ready to ${data.destination_name || currentDestination}.`);
-                speakGuidance(`Route ready. ${firstStep}`, true);
-                vibrate([120]);
-                startStepTracking();
-            } else {
-                routeActive = false;
-                setNavText("Route ready.");
-                speakGuidance("Route ready.", true);
-            }
-        } catch (error) {
-            routeActive = false;
-            setNavText("Navigation error.");
-            setVoiceStatus("Could not start navigation.");
-            speakGuidance("I could not start navigation.", true);
-            currentDestination = "";
-        }
+    if (config.mode === "outdoor" && config.destination) {
+        currentMode = "outdoor";
+        currentDestination = config.destination;
+        setModeText("Outdoor navigation");
+        hideIndoorPanel();
+        setVoiceStatus(`Starting outdoor navigation to ${config.destination}.`);
+        startVoiceRecognition();
+        startOutdoorNavigation();
+        return;
     }
 
-    async function startIndoorNavigation() {
-        const building = document.getElementById("buildingSelect").value;
-        const start = document.getElementById("indoorStart").value;
-        const destination = document.getElementById("indoorDestination").value;
-
-        try {
-            routeActive = true;
-            setNavText("Building indoor route.");
-            setModeText("Indoor navigation");
-            speakGuidance("Building your indoor route.", true);
-
-            const response = await fetch("/navigate", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    building,
-                    start,
-                    destination
-                })
-            });
-
-            const data = await response.json();
-
-            if (!data.success) {
-                routeActive = false;
-                setNavText(data.message || "Indoor route failed.");
-                speakGuidance(data.message || "Indoor route failed.", true);
-                return;
-            }
-
-            if (data.steps && data.steps.length) {
-                const firstStep = normaliseStepText(data.steps[0]);
-                setNavText(firstStep);
-                showRouteSummary(
-                    `<strong>Indoor route ready.</strong><br>${data.steps.map(step => `• ${step}`).join("<br>")}`
-                );
-                speakGuidance(`Indoor route ready. ${firstStep}`, true);
-            } else {
-                setNavText("Indoor route ready.");
-                speakGuidance("Indoor route ready.", true);
-            }
-        } catch (error) {
-            routeActive = false;
-            setNavText("Indoor navigation error.");
-            speakGuidance("There was a problem starting indoor navigation.", true);
-        }
-    }
-
-    function startStepTracking() {
-        stopTracking();
-
-        trackingWatchId = navigator.geolocation.watchPosition(
-            function(position) {
-                handleLiveTracking(position);
-            },
-            function() {
-                setVoiceStatus("Location tracking error.");
-            },
-            {
-                enableHighAccuracy: true,
-                maximumAge: 2000,
-                timeout: 10000
-            }
-        );
-    }
-
-    function handleLiveTracking(position) {
-        if (!outdoorSteps.length || !outdoorStepData.length) return;
-
-        const userLat = position.coords.latitude;
-        const userLon = position.coords.longitude;
-        const destinationDistance = getDestinationDistanceFromUser(userLat, userLon);
-
-        if (destinationDistance <= DESTINATION_ARRIVAL_THRESHOLD_M) {
-            if (!arrivedAnnounced) {
-                arrivedAnnounced = true;
-                routeActive = false;
-                setModeText("Arrival reached");
-                setNavText("You have arrived.");
-                setVoiceStatus("You have arrived.");
-                speakGuidance("You have arrived.", true);
-                vibrate([200, 80, 200]);
-            }
-
-            stopTracking();
-            return;
-        }
-
-        const bestIndex = findBestCurrentStepIndex(userLat, userLon);
-
-        if (bestIndex > currentStepIndex) {
-            currentStepIndex = bestIndex;
-        }
-
-        const currentStep = outdoorStepData[currentStepIndex];
-        if (!currentStep) return;
-
-        const distanceToStep = getStepDistanceFromUser(userLat, userLon, currentStepIndex);
-        const liveInstruction = buildLiveInstruction(currentStep, distanceToStep, destinationDistance);
-
-        setNavText(liveInstruction);
-
-        const speechKey =
-            `${currentStepIndex}|${Math.round(distanceToStep / 4)}|${Math.round(destinationDistance / 5)}|${liveInstruction}`;
-
-        maybeVibrateForTurn(liveInstruction, speechKey);
-
-        if (distanceToStep <= STEP_REACHED_THRESHOLD_M && currentStepIndex < outdoorStepData.length - 1) {
-            currentStepIndex += 1;
-
-            const nextStep = outdoorStepData[currentStepIndex];
-
-            if (nextStep) {
-                const nextDistance = getStepDistanceFromUser(userLat, userLon, currentStepIndex);
-                const nextInstruction = buildLiveInstruction(nextStep, nextDistance, destinationDistance);
-                setNavText(nextInstruction);
-
-                const nextKey = `next|${currentStepIndex}|${Math.round(nextDistance / 4)}|${nextInstruction}`;
-
-                if (shouldSpeakGuidance(nextKey, true)) {
-                    maybeVibrateForTurn(nextInstruction, nextKey);
-                    speakGuidance(nextInstruction, true);
-                }
-            }
-
-            return;
-        }
-
-        if (shouldSpeakGuidance(speechKey, false)) {
-            speakGuidance(liveInstruction, false);
-        }
-    }
-
-    function repeatCurrentInstruction() {
-        const text = document.getElementById("navText").textContent;
-
-        if (text) {
-            speakGuidance(text, true);
-            vibrate([80]);
-        }
-    }
-
-    async function startNavigation() {
-        setHazardText("No hazard detected", "safe");
-        setModeText("Waiting for destination");
-        setVoiceStatus("Welcome to NavGuid. Where do you want to go?");
-        setNavText("Say indoor navigation or take me to your destination.");
-        speakGuidance("Welcome to NavGuid. Where do you want to go?", true);
+    if (config.mode === "outdoor") {
+        currentMode = "outdoor";
+        hideIndoorPanel();
+        setModeText("Outdoor navigation");
+        setNavText("Tell me where you want to go.");
+        setVoiceStatus("Outdoor navigation ready.");
+        speakGuidance("Where do you want to go?", true);
         startVoiceRecognition();
     }
+}
 
-    function runIncomingVoiceFlowFromUrl() {
-        const config = getAutoStartConfig();
+window.addEventListener("resize", syncOverlaySize);
 
-        if (!config.autostart) {
-            return;
-        }
+window.addEventListener("load", function() {
+    if (introHasRun) return;
+    introHasRun = true;
 
-        if (config.mode === "indoor") {
-            activateIndoorMode(false);
-            setVoiceStatus("Indoor navigation ready.");
-            setNavText("Indoor navigation is ready. Choose your start and destination.");
-            speakGuidance("Indoor navigation is ready.", true);
-            startVoiceRecognition();
-            return;
-        }
+    const config = getAutoStartConfig();
 
-        if (config.mode === "outdoor" && config.destination) {
-            currentMode = "outdoor";
-            currentDestination = config.destination;
-            setModeText("Outdoor navigation");
-            hideIndoorPanel();
-            setVoiceStatus(`Starting outdoor navigation to ${config.destination}.`);
-            startVoiceRecognition();
-            startOutdoorNavigation();
-            return;
-        }
-
-        if (config.mode === "outdoor") {
-            currentMode = "outdoor";
-            hideIndoorPanel();
-            setModeText("Outdoor navigation");
-            setNavText("Tell me where you want to go.");
-            setVoiceStatus("Outdoor navigation ready.");
-            speakGuidance("Where do you want to go?", true);
-            startVoiceRecognition();
-        }
+    if (config.autostart) {
+        setTimeout(() => {
+            runIncomingVoiceFlowFromUrl();
+        }, 500);
+    } else {
+        setVoiceStatus("Tap Start Voice Navigation, then tell me where you want to go.");
+        setNavText("Tap Start Voice Navigation, then say indoor navigation or take me to your destination.");
     }
-
-    window.addEventListener("resize", syncOverlaySize);
-
-    window.addEventListener("load", function() {
-        if (introHasRun) return;
-        introHasRun = true;
-
-        const config = getAutoStartConfig();
-
-        if (config.autostart) {
-            setTimeout(() => {
-                runIncomingVoiceFlowFromUrl();
-            }, 500);
-        } else {
-            setVoiceStatus("Tap Start Voice Navigation, then tell me where you want to go.");
-            setNavText("Tap Start Voice Navigation, then say indoor navigation or take me to your destination.");
-        }
-    });
+});
 </script>
+
 </body>
 </html>
