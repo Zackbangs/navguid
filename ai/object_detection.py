@@ -8,15 +8,15 @@ from ultralytics.nn.tasks import DetectionModel
 
 
 """
-NavGuid Hazard Detection Module - HD Detection v2
+NavGuid Hazard Detection Module - HD Detection v3
 ------------------------------------------------
 
-Purpose:
-- Stronger object/hazard detection while keeping Render Starter stability.
-- Uses yolov8m.pt if available.
-- Falls back to yolov8n.pt if yolov8m.pt is missing.
-- Reduces false "person very close" alerts.
-- Gives close centre-path objects higher priority.
+Main goals:
+- Stronger real-world obstacle awareness.
+- Reduce false "person very close" warnings.
+- Detect known YOLO COCO objects.
+- Add generic obstacle fallback for close centre-path shapes.
+- Keep Render Starter stability with yolov8m.pt.
 """
 
 
@@ -70,7 +70,7 @@ MAX_RETURNED_DETECTIONS = 8
 
 
 CLASS_MIN_CONFIDENCE = {
-    "person": 0.30,
+    "person": 0.32,
 
     "bicycle": 0.22,
     "motorcycle": 0.22,
@@ -100,7 +100,7 @@ CLASS_MIN_CONFIDENCE = {
 
 
 CLASS_MIN_AREA_RATIO = {
-    "person": 0.0012,
+    "person": 0.0014,
 
     "bicycle": 0.0014,
     "motorcycle": 0.0015,
@@ -280,13 +280,13 @@ def _is_relevant_box(class_name, conf, x1, y1, x2, y2, width, height):
     aspect_ratio = box_height / box_width
 
     if class_name == "person":
-        if aspect_ratio < 0.75:
+        if aspect_ratio < 0.85:
             return False
 
-        if aspect_ratio > 5.8:
+        if aspect_ratio > 5.5:
             return False
 
-        if conf < 0.34 and area_ratio < 0.006:
+        if conf < 0.40 and area_ratio < 0.008:
             return False
 
     return True
@@ -294,41 +294,41 @@ def _is_relevant_box(class_name, conf, x1, y1, x2, y2, width, height):
 
 def _severity_weight(severity):
     if severity == "urgent":
-        return 0.80
+        return 0.85
 
     if severity == "warning":
-        return 0.48
+        return 0.50
 
-    return 0.26
+    return 0.28
 
 
 def _class_priority(class_name):
     priorities = {
-        "person": 0.22,
+        "person": 0.18,
 
-        "car": 0.34,
-        "truck": 0.44,
-        "bus": 0.44,
-        "motorcycle": 0.36,
-        "bicycle": 0.32,
-        "dog": 0.30,
+        "car": 0.36,
+        "truck": 0.46,
+        "bus": 0.46,
+        "motorcycle": 0.38,
+        "bicycle": 0.34,
+        "dog": 0.32,
 
-        "fire hydrant": 0.26,
-        "parking meter": 0.26,
-        "stop sign": 0.18,
-        "traffic light": 0.18,
+        "fire hydrant": 0.30,
+        "parking meter": 0.30,
+        "stop sign": 0.22,
+        "traffic light": 0.22,
 
-        "chair": 0.24,
-        "bench": 0.24,
-        "couch": 0.24,
-        "dining table": 0.22,
-        "backpack": 0.22,
-        "suitcase": 0.22,
-        "umbrella": 0.18,
-        "sports ball": 0.16,
-        "potted plant": 0.18,
-        "bottle": 0.16,
-        "tv": 0.14,
+        "chair": 0.28,
+        "bench": 0.28,
+        "couch": 0.28,
+        "dining table": 0.26,
+        "backpack": 0.26,
+        "suitcase": 0.26,
+        "umbrella": 0.22,
+        "sports ball": 0.18,
+        "potted plant": 0.22,
+        "bottle": 0.18,
+        "tv": 0.16,
     }
 
     return priorities.get(class_name, 0.12)
@@ -338,18 +338,41 @@ def _center_path_bonus(direction_label, distance_label):
     bonus = 0.0
 
     if direction_label == "center":
-        bonus += 0.46
+        bonus += 0.60
 
     if distance_label == "very_close":
-        bonus += 0.95
+        bonus += 1.05
     elif distance_label == "close":
-        bonus += 0.60
+        bonus += 0.70
     elif distance_label == "ahead":
-        bonus += 0.30
+        bonus += 0.34
     else:
-        bonus += 0.07
+        bonus += 0.08
 
     return bonus
+
+
+def _path_blocking_bonus(x1, x2, y2, width, height):
+    """
+    Higher score if object overlaps the user's centre walking path.
+    """
+
+    center_left = width * 0.38
+    center_right = width * 0.62
+
+    overlaps_center_path = x1 <= center_right and x2 >= center_left
+    bottom_ratio = _box_bottom_ratio(y2, height)
+
+    if overlaps_center_path and bottom_ratio >= 0.82:
+        return 0.75
+
+    if overlaps_center_path and bottom_ratio >= 0.65:
+        return 0.45
+
+    if overlaps_center_path:
+        return 0.22
+
+    return 0.0
 
 
 def _build_object_message(class_name, distance_label, direction_label, severity):
@@ -381,11 +404,12 @@ def _build_detection_entry(class_name, severity, conf, x1, y1, x2, y2, width, he
 
     score = (
         (conf * 2.0)
-        + (area_ratio * 4.2)
+        + (area_ratio * 4.4)
         + _severity_weight(severity)
         + _class_priority(class_name)
         + _center_path_bonus(direction_label, distance_label)
-        - (horizontal_penalty * 0.60)
+        + _path_blocking_bonus(x1, x2, y2, width, height)
+        - (horizontal_penalty * 0.50)
     )
 
     return {
@@ -407,11 +431,6 @@ def _build_detection_entry(class_name, severity, conf, x1, y1, x2, y2, width, he
 
 
 def _suppress_weak_person_false_positive(candidates):
-    """
-    If a weak person detection overlaps the same centre-path area as another
-    close obstacle, reduce the chance of saying 'person very close' wrongly.
-    """
-
     if not candidates:
         return candidates
 
@@ -422,19 +441,89 @@ def _suppress_weak_person_false_positive(candidates):
         and item["direction_label"] == "center"
     ]
 
-    if not close_obstacles:
-        return candidates
-
-    filtered = []
-
     for item in candidates:
         if item["hazard_type"] == "person":
-            if item["conf"] < 0.42 and item["distance_label"] in ["very_close", "close"]:
-                item["score"] = round(item["score"] - 0.55, 4)
+            if item["conf"] < 0.45 and item["distance_label"] in ["very_close", "close"]:
+                item["score"] = round(item["score"] - 0.75, 4)
 
-        filtered.append(item)
+            if close_obstacles and item["conf"] < 0.55:
+                item["score"] = round(item["score"] - 0.50, 4)
 
-    return filtered
+    return candidates
+
+
+def _detect_generic_obstacle(frame):
+    """
+    Generic fallback for unknown close obstacles.
+
+    This helps when COCO does not know the object class, such as a pole,
+    bin, barrier, or random object. It does not replace YOLO. It only adds
+    a cautious warning when a strong shape is close to the centre path.
+    """
+
+    height, width = frame.shape[:2]
+
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+
+    edges = cv2.Canny(blur, 70, 150)
+
+    lower_half = edges[int(height * 0.35):height, :]
+    contours, _ = cv2.findContours(lower_half, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    best = None
+    best_score = 0.0
+
+    for contour in contours:
+        x, y, w, h = cv2.boundingRect(contour)
+
+        x1 = float(x)
+        y1 = float(y + int(height * 0.35))
+        x2 = float(x + w)
+        y2 = float(y + h + int(height * 0.35))
+
+        area_ratio = _box_area_ratio(x1, y1, x2, y2, width, height)
+        bottom_ratio = _box_bottom_ratio(y2, height)
+
+        if area_ratio < 0.006:
+            continue
+
+        direction_label = _get_direction_label(x1, x2, width)
+
+        if direction_label != "center":
+            continue
+
+        if bottom_ratio < 0.62:
+            continue
+
+        distance_label = _get_distance_label(area_ratio, bottom_ratio)
+
+        score = (
+            area_ratio * 6.0
+            + _center_path_bonus(direction_label, distance_label)
+            + _path_blocking_bonus(x1, x2, y2, width, height)
+        )
+
+        if score > best_score:
+            best_score = score
+            best = {
+                "hazard_detected": True,
+                "hazard_type": "generic_obstacle",
+                "severity": "caution",
+                "message": f"Caution. Obstacle {_distance_phrase(distance_label)}.",
+                "distance_label": distance_label,
+                "direction_label": direction_label,
+                "bbox": {
+                    "x1": int(x1),
+                    "y1": int(y1),
+                    "x2": int(x2),
+                    "y2": int(y2)
+                },
+                "conf": 0.40,
+                "score": round(score, 4)
+            }
+
+    return best
 
 
 def detect_hazard_from_frame(frame):
@@ -509,6 +598,19 @@ def detect_hazard_from_frame(frame):
                     height
                 )
             )
+
+    generic_obstacle = _detect_generic_obstacle(frame)
+
+    if generic_obstacle:
+        strong_known_center_object = any(
+            item["direction_label"] == "center"
+            and item["distance_label"] in ["very_close", "close"]
+            and item["conf"] >= 0.50
+            for item in candidates
+        )
+
+        if not strong_known_center_object:
+            candidates.append(generic_obstacle)
 
     candidates = _suppress_weak_person_false_positive(candidates)
     candidates.sort(key=lambda item: item["score"], reverse=True)
