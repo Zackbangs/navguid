@@ -8,16 +8,15 @@ from ultralytics.nn.tasks import DetectionModel
 
 
 """
-NavGuid Hazard Detection Module
--------------------------------
+NavGuid Hazard Detection Module - HD Detection v2
+------------------------------------------------
 
-Render-safe hazard detection for NavGuid.
-
-Current model:
-- Primary: yolov8m.pt
-- Fallback: yolov8n.pt if yolov8m.pt is missing
-
-This keeps detection stronger than yolov8n while still protecting Render stability.
+Purpose:
+- Stronger object/hazard detection while keeping Render Starter stability.
+- Uses yolov8m.pt if available.
+- Falls back to yolov8n.pt if yolov8m.pt is missing.
+- Reduces false "person very close" alerts.
+- Gives close centre-path objects higher priority.
 """
 
 
@@ -36,19 +35,24 @@ TARGET_CLASS_IDS = None
 
 TARGET_CLASSES = {
     "person": ("warning", "Person"),
+
     "bicycle": ("warning", "Bicycle"),
     "motorcycle": ("warning", "Motorcycle"),
     "car": ("warning", "Car"),
     "bus": ("urgent", "Bus"),
     "truck": ("urgent", "Truck"),
 
-    "bench": ("caution", "Obstacle"),
-    "chair": ("caution", "Obstacle"),
-    "potted plant": ("caution", "Obstacle"),
+    "bench": ("caution", "Bench or obstacle"),
+    "chair": ("caution", "Chair or obstacle"),
+    "couch": ("caution", "Large obstacle"),
+    "dining table": ("caution", "Table or obstacle"),
+    "potted plant": ("caution", "Plant or obstacle"),
     "backpack": ("caution", "Bag or obstacle"),
     "suitcase": ("caution", "Bag or obstacle"),
-    "umbrella": ("caution", "Obstacle"),
+    "umbrella": ("caution", "Umbrella or obstacle"),
     "sports ball": ("caution", "Small obstacle"),
+    "bottle": ("caution", "Small object"),
+    "tv": ("caution", "Object"),
 
     "fire hydrant": ("warning", "Pole-like obstacle"),
     "stop sign": ("caution", "Sign or pole"),
@@ -61,57 +65,66 @@ TARGET_CLASSES = {
 
 CONFIDENCE_THRESHOLD = 0.20
 IOU_THRESHOLD = 0.48
-
-# Good balance for yolov8m on Render Starter.
 PREDICT_IMGSZ = 576
-
 MAX_RETURNED_DETECTIONS = 8
 
 
 CLASS_MIN_CONFIDENCE = {
-    "person": 0.18,
+    "person": 0.30,
+
     "bicycle": 0.22,
     "motorcycle": 0.22,
     "car": 0.20,
     "bus": 0.22,
     "truck": 0.22,
 
-    "bench": 0.25,
-    "chair": 0.24,
-    "potted plant": 0.25,
-    "backpack": 0.22,
-    "suitcase": 0.22,
-    "umbrella": 0.24,
+    "bench": 0.22,
+    "chair": 0.20,
+    "couch": 0.22,
+    "dining table": 0.22,
+    "potted plant": 0.22,
+    "backpack": 0.20,
+    "suitcase": 0.20,
+    "umbrella": 0.22,
     "sports ball": 0.24,
+    "bottle": 0.24,
+    "tv": 0.24,
 
     "fire hydrant": 0.20,
     "stop sign": 0.20,
     "parking meter": 0.20,
     "traffic light": 0.20,
+
     "dog": 0.22,
 }
 
 
 CLASS_MIN_AREA_RATIO = {
-    "person": 0.0008,
+    "person": 0.0012,
+
     "bicycle": 0.0014,
     "motorcycle": 0.0015,
     "car": 0.0018,
     "bus": 0.0028,
     "truck": 0.0028,
 
-    "bench": 0.0025,
-    "chair": 0.0018,
-    "potted plant": 0.0020,
-    "backpack": 0.0014,
-    "suitcase": 0.0015,
-    "umbrella": 0.0015,
+    "bench": 0.0018,
+    "chair": 0.0014,
+    "couch": 0.0020,
+    "dining table": 0.0020,
+    "potted plant": 0.0015,
+    "backpack": 0.0012,
+    "suitcase": 0.0013,
+    "umbrella": 0.0013,
     "sports ball": 0.0012,
+    "bottle": 0.0009,
+    "tv": 0.0016,
 
     "fire hydrant": 0.0007,
     "stop sign": 0.0007,
     "parking meter": 0.0006,
     "traffic light": 0.0006,
+
     "dog": 0.0014,
 }
 
@@ -166,7 +179,9 @@ def preprocess_frame(frame):
     l_channel = clahe.apply(l_channel)
 
     merged = cv2.merge((l_channel, a_channel, b_channel))
-    return cv2.cvtColor(merged, cv2.COLOR_LAB2BGR)
+    enhanced = cv2.cvtColor(merged, cv2.COLOR_LAB2BGR)
+
+    return enhanced
 
 
 def make_result(
@@ -264,42 +279,56 @@ def _is_relevant_box(class_name, conf, x1, y1, x2, y2, width, height):
     box_height = max(1.0, y2 - y1)
     aspect_ratio = box_height / box_width
 
-    if class_name == "person" and aspect_ratio < 0.35:
-        return False
+    if class_name == "person":
+        if aspect_ratio < 0.75:
+            return False
+
+        if aspect_ratio > 5.8:
+            return False
+
+        if conf < 0.34 and area_ratio < 0.006:
+            return False
 
     return True
 
 
 def _severity_weight(severity):
     if severity == "urgent":
-        return 0.75
+        return 0.80
 
     if severity == "warning":
-        return 0.45
+        return 0.48
 
-    return 0.22
+    return 0.26
 
 
 def _class_priority(class_name):
     priorities = {
-        "person": 0.35,
-        "car": 0.32,
-        "truck": 0.42,
-        "bus": 0.42,
-        "motorcycle": 0.34,
-        "bicycle": 0.30,
-        "dog": 0.28,
-        "fire hydrant": 0.22,
-        "parking meter": 0.22,
-        "stop sign": 0.16,
-        "traffic light": 0.16,
-        "chair": 0.18,
-        "bench": 0.18,
-        "backpack": 0.16,
-        "suitcase": 0.18,
-        "umbrella": 0.14,
-        "sports ball": 0.12,
-        "potted plant": 0.14,
+        "person": 0.22,
+
+        "car": 0.34,
+        "truck": 0.44,
+        "bus": 0.44,
+        "motorcycle": 0.36,
+        "bicycle": 0.32,
+        "dog": 0.30,
+
+        "fire hydrant": 0.26,
+        "parking meter": 0.26,
+        "stop sign": 0.18,
+        "traffic light": 0.18,
+
+        "chair": 0.24,
+        "bench": 0.24,
+        "couch": 0.24,
+        "dining table": 0.22,
+        "backpack": 0.22,
+        "suitcase": 0.22,
+        "umbrella": 0.18,
+        "sports ball": 0.16,
+        "potted plant": 0.18,
+        "bottle": 0.16,
+        "tv": 0.14,
     }
 
     return priorities.get(class_name, 0.12)
@@ -309,16 +338,16 @@ def _center_path_bonus(direction_label, distance_label):
     bonus = 0.0
 
     if direction_label == "center":
-        bonus += 0.35
+        bonus += 0.46
 
     if distance_label == "very_close":
-        bonus += 0.85
+        bonus += 0.95
     elif distance_label == "close":
-        bonus += 0.50
+        bonus += 0.60
     elif distance_label == "ahead":
-        bonus += 0.24
+        bonus += 0.30
     else:
-        bonus += 0.06
+        bonus += 0.07
 
     return bonus
 
@@ -351,12 +380,12 @@ def _build_detection_entry(class_name, severity, conf, x1, y1, x2, y2, width, he
     horizontal_penalty = abs(box_center_x - width / 2.0) / max(width / 2.0, 1.0)
 
     score = (
-        (conf * 2.1)
-        + (area_ratio * 3.6)
+        (conf * 2.0)
+        + (area_ratio * 4.2)
         + _severity_weight(severity)
         + _class_priority(class_name)
         + _center_path_bonus(direction_label, distance_label)
-        - (horizontal_penalty * 0.75)
+        - (horizontal_penalty * 0.60)
     )
 
     return {
@@ -375,6 +404,37 @@ def _build_detection_entry(class_name, severity, conf, x1, y1, x2, y2, width, he
         "conf": round(conf, 3),
         "score": round(score, 4)
     }
+
+
+def _suppress_weak_person_false_positive(candidates):
+    """
+    If a weak person detection overlaps the same centre-path area as another
+    close obstacle, reduce the chance of saying 'person very close' wrongly.
+    """
+
+    if not candidates:
+        return candidates
+
+    close_obstacles = [
+        item for item in candidates
+        if item["hazard_type"] != "person"
+        and item["distance_label"] in ["very_close", "close", "ahead"]
+        and item["direction_label"] == "center"
+    ]
+
+    if not close_obstacles:
+        return candidates
+
+    filtered = []
+
+    for item in candidates:
+        if item["hazard_type"] == "person":
+            if item["conf"] < 0.42 and item["distance_label"] in ["very_close", "close"]:
+                item["score"] = round(item["score"] - 0.55, 4)
+
+        filtered.append(item)
+
+    return filtered
 
 
 def detect_hazard_from_frame(frame):
@@ -450,7 +510,9 @@ def detect_hazard_from_frame(frame):
                 )
             )
 
+    candidates = _suppress_weak_person_false_positive(candidates)
     candidates.sort(key=lambda item: item["score"], reverse=True)
+
     top_detections = candidates[:MAX_RETURNED_DETECTIONS]
 
     if top_detections:
