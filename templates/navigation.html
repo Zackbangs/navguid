@@ -2,9 +2,14 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+
+    <!-- Makes the app responsive on mobile phones, which is important for the demo and real outdoor use. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <title>NavGuid Live Navigation</title>
+
     <style>
+        /* Global colour variables for a consistent accessible high-contrast interface. */
         :root {
             --bg: #08244a;
             --card: #0e315f;
@@ -120,6 +125,7 @@
             background: #000;
         }
 
+        /* Canvas sits on top of the camera feed for bounding boxes and labels. */
         canvas {
             position: absolute;
             inset: 0;
@@ -212,10 +218,12 @@
 <body>
     <div class="container">
         <h1>NavGuid Live Navigation</h1>
+
         <div class="hero-note">
             Voice-first indoor and outdoor guidance with live hazard monitoring.
         </div>
 
+        <!-- aria-live helps screen readers announce updates without needing the user to tap. -->
         <div class="voice-card">
             <div class="voice-title">Voice assistant</div>
             <div id="voiceStatus" class="small" aria-live="polite">
@@ -230,7 +238,9 @@
 
         <div class="status-card">
             <div class="status-title">Current guidance</div>
-            <div id="navText" class="main-status">Say indoor navigation or tell me where you want to go</div>
+            <div id="navText" class="main-status">
+                Say indoor navigation or tell me where you want to go
+            </div>
         </div>
 
         <div class="hazard-card">
@@ -238,6 +248,7 @@
             <div id="hazardText" class="hazard-status">No hazard detected</div>
         </div>
 
+        <!-- Camera preview for hazard detection. Canvas overlays YOLO detection boxes. -->
         <div class="camera-wrap">
             <video id="cameraFeed" autoplay playsinline muted></video>
             <canvas id="overlayCanvas"></canvas>
@@ -245,6 +256,7 @@
 
         <div class="route-summary hidden" id="routeSummary"></div>
 
+        <!-- Indoor controls remain as fallback only. Voice-first is still the main design. -->
         <div class="indoor-panel hidden" id="indoorPanel">
             <strong>Indoor navigation</strong><br>
             <div class="small" style="margin-top: 10px; margin-bottom: 12px;">
@@ -279,6 +291,7 @@
             <button onclick="startIndoorNavigation()">Start Indoor Route</button>
         </div>
 
+        <!-- Buttons are kept as browser-permission fallback, not as the main user flow. -->
         <div class="controls">
             <button id="startBtn" onclick="startNavigation()">Start Voice Navigation</button>
             <button class="secondary" onclick="repeatCurrentInstruction()">Repeat Current Instruction</button>
@@ -288,15 +301,37 @@
     </div>
 
     <script>
+        /*
+            ======================================================
+            NavGuid Live Navigation Script
+            ------------------------------------------------------
+            This file controls:
+            1. Voice assistant input and speech output
+            2. Outdoor GPS navigation
+            3. Indoor fallback route selection
+            4. Camera startup
+            5. YOLO hazard detection through the Flask backend
+            6. Spoken hazard alerts and spoken navigation guidance
+
+            Important:
+            - The app remains voice-first.
+            - Buttons are only kept as fallback because mobile browsers
+              usually require one user tap before microphone access.
+            - Hazard detection is automatically started during outdoor navigation.
+        */
+
+        // Voice recognition state.
         let recognition = null;
         let recognitionActive = false;
         let manualStop = false;
 
+        // Camera and hazard detection state.
         let cameraStream = null;
         let hazardInterval = null;
         let hazardMonitoringActive = false;
         let detectionBusy = false;
 
+        // Navigation state.
         let currentMode = "";
         let currentDestination = "";
         let outdoorSteps = [];
@@ -308,12 +343,20 @@
         let routeActive = false;
         let introHasRun = false;
 
+        // Speech state.
         let preferredVoice = null;
         let lastHazardSpeech = "";
         let lastHazardSpeechTime = 0;
         let lastGuidanceSpeechKey = "";
         let lastGuidanceSpeechTime = 0;
 
+        /*
+            Timing and distance thresholds.
+            These values are kept moderate for demo stability:
+            - not too sensitive
+            - not too spammy
+            - still responsive enough for a walking demo
+        */
         const HAZARD_COOLDOWN_MS = 3500;
         const DESTINATION_ARRIVAL_THRESHOLD_M = 14;
         const STEP_REACHED_THRESHOLD_M = 18;
@@ -321,6 +364,11 @@
         const NOW_TURN_DISTANCE_M = 10;
         const GUIDANCE_COOLDOWN_MS = 4500;
 
+        /*
+            Selects the best available English voice.
+            The browser controls which voices are available.
+            This improves naturalness without adding a heavy external TTS API.
+        */
         function initialiseVoices() {
             if (!("speechSynthesis" in window)) return;
 
@@ -340,6 +388,11 @@
             initialiseVoices();
         }
 
+        /*
+            Splits long speech into smaller chunks.
+            This makes speech clearer and reduces the chance of mobile browsers
+            cutting off long spoken instructions.
+        */
         function splitSpeechIntoChunks(text) {
             if (!text) return [];
             return text
@@ -349,6 +402,11 @@
                 .filter(Boolean);
         }
 
+        /*
+            Core speech function.
+            priority=true cancels current speech first. This is useful for urgent
+            hazard alerts or important route changes.
+        */
         function speakText(text, priority = false, options = {}) {
             if (!("speechSynthesis" in window) || !text) return;
 
@@ -385,10 +443,12 @@
             speakChunk(0);
         }
 
+        // Standard navigation speech.
         function speakGuidance(text, priority = false) {
             speakText(text, priority, { rate: 0.92, pauseMs: 240 });
         }
 
+        // Hazard speech uses a cooldown so it does not repeat too often.
         function speakHazard(text, priority = true) {
             const now = Date.now();
 
@@ -401,6 +461,7 @@
             speakText(text, priority, { rate: 0.90, pauseMs: 180 });
         }
 
+        // UI helper functions.
         function setVoiceStatus(text) {
             document.getElementById("voiceStatus").textContent = text;
         }
@@ -425,6 +486,10 @@
             }
         }
 
+        /*
+            Converts technical route text into more natural wording.
+            This helps the demo sound less robotic.
+        */
         function normaliseStepText(step) {
             if (!step) return "Keep moving straight ahead.";
 
@@ -438,6 +503,7 @@
                 .trim();
         }
 
+        // Reads URL parameters passed from index.html, e.g. ?mode=outdoor&destination=...
         function getUrlParams() {
             return new URLSearchParams(window.location.search);
         }
@@ -451,6 +517,10 @@
             };
         }
 
+        /*
+            Gets the user's current GPS position once.
+            This is used to start outdoor routing.
+        */
         function getCurrentLocationPromise() {
             return new Promise((resolve, reject) => {
                 if (!navigator.geolocation) {
@@ -470,6 +540,11 @@
             });
         }
 
+        /*
+            Starts the back camera first.
+            If the environment camera is unavailable, it falls back to any camera.
+            This keeps the demo more reliable across phones and laptops.
+        */
         async function startBackCamera() {
             const video = document.getElementById("cameraFeed");
 
@@ -502,6 +577,7 @@
             }
         }
 
+        // Stops the camera and clears the detection overlay.
         function stopCamera() {
             if (cameraStream) {
                 cameraStream.getTracks().forEach(track => track.stop());
@@ -516,6 +592,7 @@
             ctx.clearRect(0, 0, overlay.width, overlay.height);
         }
 
+        // Keeps the overlay aligned with the camera feed size.
         function syncOverlaySize() {
             const video = document.getElementById("cameraFeed");
             const overlay = document.getElementById("overlayCanvas");
@@ -530,6 +607,10 @@
             return "#8ce99a";
         }
 
+        /*
+            Draws hazard detection boxes from backend YOLO results.
+            This does not change the detection logic; it only visualises results.
+        */
         function drawDetections(detections) {
             const video = document.getElementById("cameraFeed");
             const overlay = document.getElementById("overlayCanvas");
@@ -576,6 +657,10 @@
             });
         }
 
+        /*
+            Captures one video frame and sends it to Flask backend /detect-hazard.
+            detectionBusy prevents overlapping requests, which protects Render stability.
+        */
         async function captureAndDetectHazard() {
             if (!hazardMonitoringActive || detectionBusy) return;
 
@@ -610,7 +695,10 @@
                 drawDetections(data.detections || []);
 
                 if (data.hazard_detected) {
-                    setHazardText(data.message || "Hazard detected", data.severity === "urgent" ? "urgent" : "normal");
+                    setHazardText(
+                        data.message || "Hazard detected",
+                        data.severity === "urgent" ? "urgent" : "normal"
+                    );
                     speakHazard(data.message || "Hazard detected");
                 } else {
                     setHazardText("No hazard detected", "safe");
@@ -622,6 +710,10 @@
             }
         }
 
+        /*
+            Starts camera + hazard monitoring together.
+            This is automatically called when outdoor navigation starts.
+        */
         async function startHazardMonitoring() {
             const cameraReady = await startBackCamera();
             if (!cameraReady) return false;
@@ -672,6 +764,15 @@
             panel.innerHTML = html;
         }
 
+        /*
+            Main speech recognition controller.
+            The app listens for:
+            - indoor navigation
+            - outdoor navigation
+            - take me to [destination]
+            - repeat instruction
+            - stop listening
+        */
         function startVoiceRecognition() {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -776,6 +877,7 @@
             };
         }
 
+        // Restarts listening when no active route is running.
         function restartVoiceLoop() {
             setTimeout(() => {
                 if (!manualStop && !recognitionActive && !routeActive) {
@@ -802,6 +904,10 @@
             }
         }
 
+        /*
+            Resets voice and route state, but does not shut down the whole app.
+            Useful during demo practice.
+        */
         function resetVoiceAssistant() {
             stopVoiceRecognition();
             routeActive = false;
@@ -822,6 +928,10 @@
             restartVoiceLoop();
         }
 
+        /*
+            Fully stops voice, camera, hazard monitoring, GPS tracking, and speech.
+            This is the safest way to end the demo.
+        */
         function stopAll() {
             stopVoiceRecognition();
             stopTracking();
@@ -848,6 +958,10 @@
             return value * Math.PI / 180;
         }
 
+        /*
+            Calculates distance between two GPS points in metres.
+            Used for step progression and arrival detection.
+        */
         function haversineDistanceMeters(lat1, lon1, lat2, lon2) {
             const earthRadius = 6371000;
             const dLat = toRadians(lat2 - lat1);
@@ -879,6 +993,10 @@
             return haversineDistanceMeters(userLat, userLon, destinationCoords.lat, destinationCoords.lon);
         }
 
+        /*
+            Finds the best current OSRM step near the user.
+            This makes the app more forgiving if GPS updates are slightly delayed.
+        */
         function findBestCurrentStepIndex(userLat, userLon) {
             if (!outdoorStepData.length) return currentStepIndex;
 
@@ -902,6 +1020,13 @@
             return bestIndex;
         }
 
+        /*
+            Creates natural live guidance based on distance to the next step.
+            This gives:
+            - general guidance when far away
+            - approach instruction near a turn
+            - direct "turn now" instruction at close range
+        */
         function buildLiveInstruction(step, distanceToStep, destinationDistance = null) {
             if (!step) return "Keep moving straight ahead.";
 
@@ -979,6 +1104,11 @@
             return "Keep moving straight ahead.";
         }
 
+        /*
+            Prevents repeated spoken instructions from becoming annoying.
+            It allows new instructions immediately, but repeats the same instruction
+            only after a cooldown.
+        */
         function shouldSpeakGuidance(key, force = false) {
             const now = Date.now();
 
@@ -1002,6 +1132,11 @@
             return false;
         }
 
+        /*
+            Activates indoor mode.
+            Indoor selection remains available as fallback because indoor positioning
+            is based on selected known locations.
+        */
         function activateIndoorMode(announce = false) {
             currentMode = "indoor";
             routeActive = false;
@@ -1012,11 +1147,24 @@
             setModeText("Indoor navigation");
             setNavText("Indoor mode ready. Choose your current location and destination, then start indoor route.");
             setVoiceStatus("Indoor navigation selected.");
+
             if (announce) {
-                speakGuidance("Alright. Indoor navigation is ready. Choose your current location and destination, then start the route.", true);
+                speakGuidance(
+                    "Alright. Indoor navigation is ready. Choose your current location and destination, then start the route.",
+                    true
+                );
             }
         }
 
+        /*
+            Starts outdoor navigation.
+            This automatically starts:
+            1. Camera
+            2. Hazard monitoring
+            3. Current GPS location
+            4. OSRM route request
+            5. Live GPS step tracking
+        */
         async function startOutdoorNavigation() {
             try {
                 routeActive = true;
@@ -1087,6 +1235,10 @@
             }
         }
 
+        /*
+            Indoor navigation uses the existing Flask /navigate route.
+            No project structure is changed.
+        */
         async function startIndoorNavigation() {
             const building = document.getElementById("buildingSelect").value;
             const start = document.getElementById("indoorStart").value;
@@ -1135,6 +1287,10 @@
             }
         }
 
+        /*
+            Starts continuous GPS tracking.
+            watchPosition feeds live position updates into handleLiveTracking().
+        */
         function startStepTracking() {
             stopTracking();
 
@@ -1153,6 +1309,14 @@
             );
         }
 
+        /*
+            Main live outdoor guidance loop.
+            It checks:
+            - distance to destination
+            - current OSRM step
+            - whether user should progress to the next step
+            - whether a spoken instruction should be repeated
+        */
         function handleLiveTracking(position) {
             if (!outdoorSteps.length || !outdoorStepData.length) return;
 
@@ -1170,6 +1334,7 @@
                     setVoiceStatus("You have arrived at your destination.");
                     speakGuidance("You have arrived at your destination.", true);
                 }
+
                 stopTracking();
                 restartVoiceLoop();
                 return;
@@ -1188,7 +1353,8 @@
 
             setNavText(liveInstruction);
 
-            const speechKey = `${currentStepIndex}|${Math.round(distanceToStep / 4)}|${Math.round(destinationDistance / 5)}|${liveInstruction}`;
+            const speechKey =
+                `${currentStepIndex}|${Math.round(distanceToStep / 4)}|${Math.round(destinationDistance / 5)}|${liveInstruction}`;
 
             if (distanceToStep <= STEP_REACHED_THRESHOLD_M && currentStepIndex < outdoorStepData.length - 1) {
                 currentStepIndex += 1;
@@ -1204,6 +1370,7 @@
                         speakGuidance(nextInstruction, true);
                     }
                 }
+
                 return;
             }
 
@@ -1219,6 +1386,11 @@
             }
         }
 
+        /*
+            Starts the main voice-first experience.
+            This is triggered by button because most mobile browsers require
+            one user interaction before microphone access.
+        */
         async function startNavigation() {
             setHazardText("No hazard detected", "safe");
             setModeText("Waiting for destination");
@@ -1228,6 +1400,11 @@
             startVoiceRecognition();
         }
 
+        /*
+            Handles voice commands passed from the home page.
+            Example:
+            /navigation?autostart=1&mode=outdoor&destination=Marion
+        */
         function runIncomingVoiceFlowFromUrl() {
             const config = getAutoStartConfig();
 
@@ -1266,6 +1443,11 @@
 
         window.addEventListener("resize", syncOverlaySize);
 
+        /*
+            On page load:
+            - If opened from index.html with autostart, continue the requested flow.
+            - Otherwise, give the natural welcome prompt.
+        */
         window.addEventListener("load", function() {
             if (introHasRun) return;
             introHasRun = true;
