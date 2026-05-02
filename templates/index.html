@@ -3,30 +3,17 @@
 <head>
     <meta charset="UTF-8">
 
-    <!-- Ensures the landing page works well on phones, tablets, and desktop screens. -->
+    <!-- Mobile responsive setup -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title>NavGuid</title>
 
-    <!-- Keeps your existing external stylesheet connected. -->
+    <!-- Existing project stylesheet -->
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 
     <style>
-        /*
-            ======================================================
-            NavGuid Home Page Styling
-            ------------------------------------------------------
-            This page is designed as a voice-first landing screen.
-            The layout supports blind and visually impaired users by:
-            - using high contrast colours
-            - keeping text large and readable
-            - making the main action clear
-            - keeping buttons as fallback, not the primary interaction
-        */
-
         :root {
             --bg: #061d3d;
-            --bg-soft: #08244a;
             --card: rgba(255, 255, 255, 0.07);
             --card-strong: rgba(255, 255, 255, 0.11);
             --accent: #2f6fe4;
@@ -34,10 +21,8 @@
             --text: #ffffff;
             --muted: #d7e3ff;
             --safe: #8ce99a;
-            --warning: #ffd43b;
             --border: rgba(255, 255, 255, 0.14);
             --shadow: rgba(0, 0, 0, 0.28);
-            --radius: 22px;
         }
 
         * {
@@ -147,7 +132,7 @@
         .voice-help {
             background: var(--card-strong);
             border: 1px solid var(--border);
-            border-radius: var(--radius);
+            border-radius: 22px;
             padding: 18px;
             color: var(--muted);
             line-height: 1.7;
@@ -157,7 +142,7 @@
         .voice-status {
             text-align: center;
             color: var(--text);
-            font-size: 1.35rem;
+            font-size: 1.3rem;
             font-weight: 800;
         }
 
@@ -198,7 +183,7 @@
             font-weight: 800;
             text-decoration: none;
             cursor: pointer;
-            transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+            transition: transform 0.18s ease, background 0.18s ease;
             box-shadow: 0 12px 28px rgba(47, 111, 228, 0.28);
         }
 
@@ -267,7 +252,7 @@
             }
 
             .voice-status {
-                font-size: 1.18rem;
+                font-size: 1.12rem;
             }
 
             .feature-grid {
@@ -286,7 +271,7 @@
         <div class="container">
             <section class="hero-card" aria-label="NavGuid voice-first landing page">
 
-                <!-- Brand section for a more professional demo introduction. -->
+                <!-- Professional brand area for demo presentation -->
                 <div class="brand-row">
                     <div class="brand-mark" aria-hidden="true">N</div>
                     <h1>NavGuid</h1>
@@ -303,13 +288,11 @@
                 </div>
 
                 <div class="voice-panel">
-
-                    <!-- Main voice prompt shown visually and also spoken through speech synthesis. -->
+                    <!-- Main prompt. This updates visually and supports screen reader announcement. -->
                     <div class="voice-status" id="homeVoiceStatus" aria-live="polite">
-                        Welcome to NavGuid. Where do you want to go?
+                        Tap once to activate voice. Then tell me where you want to go.
                     </div>
 
-                    <!-- Example commands help during demo and keep the flow clear for users. -->
                     <div class="voice-help">
                         <strong>Voice commands you can try:</strong>
 
@@ -321,10 +304,10 @@
                     </div>
                 </div>
 
-                <!-- Buttons remain as fallback because most mobile browsers require one tap for microphone access. -->
+                <!-- One tap is needed because mobile browsers block microphone/audio until user interaction. -->
                 <div class="button-row">
                     <button id="activateVoiceBtn" onclick="activateHomeVoice()">
-                        Start Voice Assistant
+                        Tap once to activate voice
                     </button>
 
                     <a class="button secondary-btn" id="continueBtn" href="{{ url_for('navigation_page') }}">
@@ -332,7 +315,6 @@
                     </a>
                 </div>
 
-                <!-- Feature cards make the first page look more complete and presentation-ready. -->
                 <div class="feature-grid" aria-label="NavGuid key features">
                     <div class="feature-card">
                         <div class="feature-title">Voice-first control</div>
@@ -357,8 +339,8 @@
                 </div>
 
                 <div class="support-note">
-                    Voice is the main experience. The buttons are kept only as a fallback when the browser
-                    requires one first tap to allow microphone access.
+                    NavGuid is voice-first. The first tap is only used to unlock microphone and audio access
+                    because of mobile browser security rules.
                 </div>
             </section>
         </div>
@@ -366,36 +348,24 @@
 
     <script>
         /*
-            ======================================================
             NavGuid Home Page Script
-            ------------------------------------------------------
-            This script controls the first user interaction.
-            It listens for a voice command and sends the user to
-            the navigation page with URL parameters.
+            ------------------------
+            This script starts the voice-first flow from the landing page.
 
-            Example:
-            - User says: "Indoor navigation"
-              App opens: /navigation?mode=indoor&autostart=1
-
-            - User says: "Take me to Marion Shopping Centre"
-              App opens:
-              /navigation?mode=outdoor&destination=marion shopping centre&autostart=1
+            Important mobile note:
+            Phones usually block microphone and audio until the user taps once.
+            That is why this page uses one "Tap once to activate voice" button.
+            After that, the user continues by voice.
         */
 
-        // Home page speech recognition state.
         let homeRecognition = null;
         let homeRecognitionActive = false;
         let homeManualStop = false;
 
-        // Text-to-speech voice state.
         let preferredVoice = null;
         let introSpoken = false;
 
-        /*
-            Selects the most natural English voice available on the device.
-            The exact voice depends on the phone/browser, so this function
-            chooses the best available fallback.
-        */
+        // Selects the best available English voice on the device.
         function initialiseVoices() {
             if (!("speechSynthesis" in window)) return;
 
@@ -415,24 +385,19 @@
             initialiseVoices();
         }
 
-        /*
-            Splits longer spoken messages into smaller parts.
-            This helps mobile browsers speak more clearly without cutting off audio.
-        */
+        // Mobile-safe sentence splitter. Avoids advanced regex that may fail on some phones.
         function splitSpeechIntoChunks(text) {
             if (!text) return [];
 
             return text
                 .replace(/\s+/g, " ")
                 .trim()
-                .split(/(?<=[.!?])\s+/)
+                .split(".")
+                .map(sentence => sentence.trim())
                 .filter(Boolean);
         }
 
-        /*
-            Speaks text using the browser's speech synthesis engine.
-            priority=true cancels previous speech before speaking the new message.
-        */
+        // Speaks text using browser speech synthesis.
         function speakText(text, priority = false, options = {}) {
             if (!("speechSynthesis" in window) || !text) return;
 
@@ -469,21 +434,16 @@
             speakChunk(0);
         }
 
-        // Updates the visible voice status message.
         function setHomeVoiceStatus(text) {
             document.getElementById("homeVoiceStatus").textContent = text;
         }
 
-        // Updates the current mode pill.
         function setHomeModeStatus(text) {
             const status = document.getElementById("homeModeStatus");
             status.innerHTML = `<span class="status-dot" aria-hidden="true"></span>${text}`;
         }
 
-        /*
-            Opens the Flask navigation page and passes mode/destination values
-            through the URL without changing the project structure.
-        */
+        // Sends the user to navigation.html with mode and destination parameters.
         function goToNavigation(params = {}) {
             const url = new URL("{{ url_for('navigation_page') }}", window.location.origin);
 
@@ -496,14 +456,7 @@
             window.location.href = url.toString();
         }
 
-        /*
-            Starts browser speech recognition.
-            This listens for:
-            - "indoor navigation"
-            - "outdoor navigation"
-            - "take me to [destination]"
-            - "navigate to [destination]"
-        */
+        // Starts voice recognition on the home page.
         function startHomeVoiceRecognition() {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -531,7 +484,7 @@
                 homeRecognition.start();
             } catch (error) {
                 homeRecognitionActive = false;
-                setHomeVoiceStatus("Microphone could not start. Tap Start Voice Assistant and try again.");
+                setHomeVoiceStatus("Microphone could not start. Tap once to activate voice and try again.");
                 setHomeModeStatus("Ready");
                 return;
             }
@@ -594,7 +547,7 @@
                 homeRecognitionActive = false;
 
                 if (!homeManualStop) {
-                    setHomeVoiceStatus("Voice input failed. Tap Start Voice Assistant and try again.");
+                    setHomeVoiceStatus("Voice input failed. Tap once to activate voice and try again.");
                     setHomeModeStatus("Listening error");
                 }
             };
@@ -608,7 +561,6 @@
             };
         }
 
-        // Restarts listening after unclear speech.
         function restartHomeVoiceLoop() {
             setTimeout(() => {
                 if (!homeManualStop && !homeRecognitionActive) {
@@ -617,10 +569,7 @@
             }, 900);
         }
 
-        /*
-            Main button fallback.
-            It starts the voice-first flow after the browser receives one user interaction.
-        */
+        // Main activation button. This unlocks voice/audio on mobile browsers.
         function activateHomeVoice() {
             if (!introSpoken) {
                 introSpoken = true;
@@ -630,20 +579,10 @@
             startHomeVoiceRecognition();
         }
 
-        /*
-            Speaks the welcome prompt on page load.
-            Some browsers may block automatic audio until the user taps,
-            but this still supports desktop and demo environments.
-        */
+        // Do not auto-speak on page load. This prevents duplicate man/woman voices.
         window.addEventListener("load", function() {
             setHomeModeStatus("Ready");
-
-            setTimeout(() => {
-                if (!introSpoken) {
-                    introSpoken = true;
-                    speakText("Welcome to NavGuid. Where do you want to go?", true);
-                }
-            }, 400);
+            setHomeVoiceStatus("Tap once to activate voice. Then tell me where you want to go.");
         });
     </script>
 </body>
