@@ -6,17 +6,36 @@ import torch
 from ultralytics import YOLO
 from ultralytics.nn.tasks import DetectionModel
 
+
+"""
+NavGuid Hazard Detection Module
+-------------------------------
+
+This file handles camera-based hazard detection for NavGuid.
+
+Important:
+- Project structure is not changed.
+- YOLO model is not upgraded.
+- The app continues using yolov8n.pt for Render stability.
+- Detection is tuned to be more sensitive without making Render too heavy.
+"""
+
+
+# Required for safer PyTorch/Ultralytics model loading on the current setup.
 torch.serialization.add_safe_globals([DetectionModel])
+
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
-# Render-safe model choice:
-# Use yolov8n.pt in deployment. Ultralytics can auto-download it at runtime.
+# Keep current stable Render-safe model.
 MODEL_PATH = os.path.join(BASE_DIR, "yolov8n.pt")
 
 model = None
 TARGET_CLASS_IDS = None
 
+
+# Hazard classes supported by COCO / YOLOv8n.
+# The second value is the friendly name spoken/displayed to the user.
 TARGET_CLASSES = {
     "person": ("warning", "Person"),
     "bicycle": ("warning", "Bicycle"),
@@ -24,62 +43,118 @@ TARGET_CLASSES = {
     "car": ("warning", "Car"),
     "bus": ("urgent", "Bus"),
     "truck": ("urgent", "Truck"),
+
+    # Common walking path obstacles.
     "bench": ("caution", "Obstacle"),
     "chair": ("caution", "Obstacle"),
     "potted plant": ("caution", "Obstacle"),
+    "backpack": ("caution", "Bag or obstacle"),
+    "suitcase": ("caution", "Bag or obstacle"),
+    "umbrella": ("caution", "Obstacle"),
+    "sports ball": ("caution", "Small obstacle"),
+
+    # Pole-like / street-side objects.
     "fire hydrant": ("warning", "Pole-like obstacle"),
     "stop sign": ("caution", "Sign or pole"),
     "parking meter": ("warning", "Pole-like obstacle"),
     "traffic light": ("caution", "Traffic light"),
+
+    # Animals can be important in walking paths.
+    "dog": ("warning", "Dog"),
 }
 
-CONFIDENCE_THRESHOLD = 0.22
-IOU_THRESHOLD = 0.50
-PREDICT_IMGSZ = 512
-MAX_RETURNED_DETECTIONS = 6
 
+# Lower global threshold improves detection sensitivity.
+# Class-specific thresholds below still filter noisy detections.
+CONFIDENCE_THRESHOLD = 0.18
+
+# Slightly relaxed IOU helps keep valid overlapping detections.
+IOU_THRESHOLD = 0.48
+
+# 576 is stronger than 512 while still more Render-friendly than 640.
+PREDICT_IMGSZ = 576
+
+MAX_RETURNED_DETECTIONS = 8
+
+
+# Class-specific confidence tuning.
+# People and vehicles are intentionally more sensitive because they matter most.
 CLASS_MIN_CONFIDENCE = {
-    "person": 0.20,
-    "bicycle": 0.24,
-    "motorcycle": 0.26,
-    "car": 0.22,
-    "bus": 0.24,
-    "truck": 0.24,
-    "bench": 0.30,
-    "chair": 0.28,
-    "potted plant": 0.30,
-    "fire hydrant": 0.22,
-    "stop sign": 0.22,
-    "parking meter": 0.20,
-    "traffic light": 0.20,
+    "person": 0.16,
+    "bicycle": 0.20,
+    "motorcycle": 0.21,
+    "car": 0.18,
+    "bus": 0.20,
+    "truck": 0.20,
+
+    "bench": 0.24,
+    "chair": 0.22,
+    "potted plant": 0.24,
+    "backpack": 0.20,
+    "suitcase": 0.20,
+    "umbrella": 0.22,
+    "sports ball": 0.22,
+
+    "fire hydrant": 0.18,
+    "stop sign": 0.18,
+    "parking meter": 0.17,
+    "traffic light": 0.18,
+    "dog": 0.20,
 }
 
+
+# Minimum box size filter.
+# Lower values help detect smaller/farther objects, but still reduce false positives.
 CLASS_MIN_AREA_RATIO = {
-    "person": 0.0012,
-    "bicycle": 0.0020,
-    "motorcycle": 0.0020,
-    "car": 0.0025,
-    "bus": 0.0035,
-    "truck": 0.0035,
-    "bench": 0.0035,
-    "chair": 0.0025,
-    "potted plant": 0.0028,
-    "fire hydrant": 0.0010,
-    "stop sign": 0.0010,
-    "parking meter": 0.0009,
-    "traffic light": 0.0009,
+    "person": 0.0008,
+    "bicycle": 0.0014,
+    "motorcycle": 0.0015,
+    "car": 0.0018,
+    "bus": 0.0028,
+    "truck": 0.0028,
+
+    "bench": 0.0025,
+    "chair": 0.0018,
+    "potted plant": 0.0020,
+    "backpack": 0.0014,
+    "suitcase": 0.0015,
+    "umbrella": 0.0015,
+    "sports ball": 0.0012,
+
+    "fire hydrant": 0.0007,
+    "stop sign": 0.0007,
+    "parking meter": 0.0006,
+    "traffic light": 0.0006,
+    "dog": 0.0014,
 }
 
 
 def get_model():
+    """
+    Lazy-load the YOLO model.
+
+    The model is loaded only when hazard detection is first used.
+    This helps reduce startup pressure on Render.
+    """
+
     global model
+
     if model is None:
         model = YOLO(MODEL_PATH)
+
     return model
 
 
 def _build_target_class_ids():
+    """
+    Convert target class names into YOLO class IDs.
+
+    This keeps prediction focused on useful hazard classes instead of detecting
+    every possible COCO object.
+    """
+
     global TARGET_CLASS_IDS
+
     if TARGET_CLASS_IDS is not None:
         return TARGET_CLASS_IDS
 
@@ -95,27 +170,41 @@ def _build_target_class_ids():
 
 
 def decode_base64_image(data_url: str):
+    """
+    Decode a base64 camera frame sent from the browser.
+    """
+
     if not data_url or "," not in data_url:
         return None
 
-    encoded = data_url.split(",", 1)[1]
-    image_bytes = base64.b64decode(encoded)
-    image_array = np.frombuffer(image_bytes, dtype=np.uint8)
-    image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
-    return image
+    try:
+        encoded = data_url.split(",", 1)[1]
+        image_bytes = base64.b64decode(encoded)
+        image_array = np.frombuffer(image_bytes, dtype=np.uint8)
+        image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+        return image
+    except Exception:
+        return None
 
 
 def preprocess_frame(frame):
+    """
+    Improve frame contrast without making the image too artificial.
+
+    Earlier blur can sometimes weaken small object detection, so this version
+    keeps the frame sharper and only applies light contrast enhancement.
+    """
+
     if frame is None:
         return None
 
     enhanced = frame.copy()
-    enhanced = cv2.GaussianBlur(enhanced, (3, 3), 0)
 
+    # CLAHE improves visibility in low-light or uneven lighting.
     lab = cv2.cvtColor(enhanced, cv2.COLOR_BGR2LAB)
     l_channel, a_channel, b_channel = cv2.split(lab)
 
-    clahe = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8))
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     l_channel = clahe.apply(l_channel)
 
     merged = cv2.merge((l_channel, a_channel, b_channel))
@@ -134,6 +223,10 @@ def make_result(
     bbox=None,
     detections=None
 ):
+    """
+    Standard response format returned to Flask/app.py.
+    """
+
     return {
         "hazard_detected": hazard_detected,
         "hazard_type": hazard_type,
@@ -149,34 +242,58 @@ def make_result(
 def _box_area_ratio(x1, y1, x2, y2, width, height):
     box_area = max(0.0, (x2 - x1)) * max(0.0, (y2 - y1))
     frame_area = float(width * height)
+
     if frame_area <= 0:
         return 0.0
+
     return box_area / frame_area
 
 
 def _box_bottom_ratio(y2, height):
+    """
+    How close the bottom of the object is to the bottom of the screen.
+
+    Objects lower in the camera view are usually closer to the user.
+    """
+
     return float(y2) / max(float(height), 1.0)
 
 
 def _get_direction_label(x1, x2, width):
+    """
+    Estimate object direction in the camera frame.
+    """
+
     cx = (x1 + x2) / 2.0
-    left_boundary = width * 0.35
-    right_boundary = width * 0.65
+    left_boundary = width * 0.34
+    right_boundary = width * 0.66
 
     if cx < left_boundary:
         return "left"
+
     if cx > right_boundary:
         return "right"
+
     return "center"
 
 
 def _get_distance_label(area_ratio, bottom_ratio):
-    if area_ratio >= 0.18 or bottom_ratio >= 0.92:
+    """
+    Estimate distance using object size and screen position.
+
+    This is not real-world depth measurement, but it gives useful practical
+    labels for assistive warnings.
+    """
+
+    if area_ratio >= 0.16 or bottom_ratio >= 0.91:
         return "very_close"
-    if area_ratio >= 0.08 or bottom_ratio >= 0.84:
+
+    if area_ratio >= 0.065 or bottom_ratio >= 0.82:
         return "close"
-    if area_ratio >= 0.02 or bottom_ratio >= 0.68:
+
+    if area_ratio >= 0.012 or bottom_ratio >= 0.62:
         return "ahead"
+
     return "far"
 
 
@@ -187,6 +304,7 @@ def _distance_phrase(distance_label):
         "ahead": "ahead",
         "far": "far ahead"
     }
+
     return phrases.get(distance_label, "ahead")
 
 
@@ -196,16 +314,24 @@ def _direction_phrase(direction_label):
         "center": "ahead",
         "right": "on your right"
     }
+
     return phrases.get(direction_label, "ahead")
 
 
 def _is_relevant_box(class_name, conf, x1, y1, x2, y2, width, height):
+    """
+    Filter noisy boxes while keeping important detections.
+
+    This is tuned to reduce missed hazards without overwhelming the user.
+    """
+
     min_conf = CLASS_MIN_CONFIDENCE.get(class_name, CONFIDENCE_THRESHOLD)
     if conf < min_conf:
         return False
 
     area_ratio = _box_area_ratio(x1, y1, x2, y2, width, height)
-    min_area_ratio = CLASS_MIN_AREA_RATIO.get(class_name, 0.003)
+    min_area_ratio = CLASS_MIN_AREA_RATIO.get(class_name, 0.002)
+
     if area_ratio < min_area_ratio:
         return False
 
@@ -213,7 +339,9 @@ def _is_relevant_box(class_name, conf, x1, y1, x2, y2, width, height):
     box_height = max(1.0, y2 - y1)
     aspect_ratio = box_height / box_width
 
-    if class_name == "person" and aspect_ratio < 0.45:
+    # People are often vertical. This avoids some false person detections.
+    # Kept relaxed so sitting/partial people can still be detected.
+    if class_name == "person" and aspect_ratio < 0.35:
         return False
 
     return True
@@ -221,45 +349,94 @@ def _is_relevant_box(class_name, conf, x1, y1, x2, y2, width, height):
 
 def _severity_weight(severity):
     if severity == "urgent":
-        return 0.65
+        return 0.75
+
     if severity == "warning":
-        return 0.38
-    return 0.20
+        return 0.45
+
+    return 0.22
+
+
+def _class_priority(class_name):
+    """
+    Prioritise objects most important for blind pedestrian navigation.
+    """
+
+    priorities = {
+        "person": 0.35,
+        "car": 0.32,
+        "truck": 0.42,
+        "bus": 0.42,
+        "motorcycle": 0.34,
+        "bicycle": 0.30,
+        "dog": 0.28,
+        "fire hydrant": 0.22,
+        "parking meter": 0.22,
+        "stop sign": 0.16,
+        "traffic light": 0.16,
+        "chair": 0.18,
+        "bench": 0.18,
+        "backpack": 0.16,
+        "suitcase": 0.18,
+        "umbrella": 0.14,
+        "sports ball": 0.12,
+        "potted plant": 0.14,
+    }
+
+    return priorities.get(class_name, 0.12)
 
 
 def _center_path_bonus(direction_label, distance_label):
+    """
+    Objects in the centre of the frame are more likely to block the path.
+    """
+
     bonus = 0.0
+
     if direction_label == "center":
-        bonus += 0.25
+        bonus += 0.35
+
     if distance_label == "very_close":
-        bonus += 0.75
+        bonus += 0.85
     elif distance_label == "close":
-        bonus += 0.42
+        bonus += 0.50
     elif distance_label == "ahead":
-        bonus += 0.18
+        bonus += 0.24
     else:
-        bonus += 0.08
+        bonus += 0.06
+
     return bonus
 
 
 def _build_object_message(class_name, distance_label, direction_label, severity):
+    """
+    Build short, natural hazard speech.
+
+    Shorter phrases sound less robotic and are easier to understand while walking.
+    """
+
     friendly_name = TARGET_CLASSES.get(class_name, ("caution", class_name))[1]
     distance_text = _distance_phrase(distance_label)
     direction_text = _direction_phrase(direction_label)
 
-    prefix = "Caution"
-    if severity == "warning":
-        prefix = "Warning"
-    elif severity == "urgent":
-        prefix = "Urgent"
+    if severity == "urgent":
+        prefix = "Careful"
+    elif severity == "warning":
+        prefix = "Watch out"
+    else:
+        prefix = "Caution"
 
     if direction_label == "center":
         return f"{prefix}. {friendly_name} {distance_text}."
 
-    return f"{prefix}. {friendly_name} {distance_text} {direction_text}."
+    return f"{prefix}. {friendly_name} {distance_text}, {direction_text}."
 
 
 def _build_detection_entry(class_name, severity, conf, x1, y1, x2, y2, width, height):
+    """
+    Convert one YOLO box into a frontend-friendly detection entry.
+    """
+
     area_ratio = _box_area_ratio(x1, y1, x2, y2, width, height)
     bottom_ratio = _box_bottom_ratio(y2, height)
     distance_label = _get_distance_label(area_ratio, bottom_ratio)
@@ -269,11 +446,12 @@ def _build_detection_entry(class_name, severity, conf, x1, y1, x2, y2, width, he
     horizontal_penalty = abs(box_center_x - width / 2.0) / max(width / 2.0, 1.0)
 
     score = (
-        (conf * 1.9)
-        + (area_ratio * 3.2)
+        (conf * 2.1)
+        + (area_ratio * 3.6)
         + _severity_weight(severity)
+        + _class_priority(class_name)
         + _center_path_bonus(direction_label, distance_label)
-        - (horizontal_penalty * 0.9)
+        - (horizontal_penalty * 0.75)
     )
 
     return {
@@ -290,17 +468,31 @@ def _build_detection_entry(class_name, severity, conf, x1, y1, x2, y2, width, he
             "y2": int(y2)
         },
         "conf": round(conf, 3),
-        "score": score
+        "score": round(score, 4)
     }
 
 
 def detect_hazard_from_frame(frame):
+    """
+    Main frame detection function.
+
+    It:
+    1. Preprocesses the camera frame
+    2. Runs YOLO prediction on selected classes only
+    3. Filters weak/noisy boxes
+    4. Ranks detections by risk
+    5. Returns the most important hazard plus all top detections
+    """
+
     if frame is None:
         return make_result(False, None, None, "No valid frame available.", detections=[])
 
     frame = preprocess_frame(frame)
-    height, width = frame.shape[:2]
 
+    if frame is None:
+        return make_result(False, None, None, "No valid frame available.", detections=[])
+
+    height, width = frame.shape[:2]
     target_ids = _build_target_class_ids()
 
     results = get_model().predict(
@@ -309,7 +501,7 @@ def detect_hazard_from_frame(frame):
         conf=CONFIDENCE_THRESHOLD,
         iou=IOU_THRESHOLD,
         imgsz=PREDICT_IMGSZ,
-        max_det=16,
+        max_det=24,
         classes=target_ids,
         device="cpu"
     )
@@ -318,6 +510,7 @@ def detect_hazard_from_frame(frame):
 
     for result in results:
         boxes = result.boxes
+
         if boxes is None:
             continue
 
@@ -335,8 +528,19 @@ def detect_hazard_from_frame(frame):
                 continue
 
             severity, _friendly_name = TARGET_CLASSES[class_name]
+
             candidates.append(
-                _build_detection_entry(class_name, severity, conf, x1, y1, x2, y2, width, height)
+                _build_detection_entry(
+                    class_name,
+                    severity,
+                    conf,
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                    width,
+                    height
+                )
             )
 
     candidates.sort(key=lambda item: item["score"], reverse=True)
@@ -344,6 +548,7 @@ def detect_hazard_from_frame(frame):
 
     if top_detections:
         best = top_detections[0]
+
         return make_result(
             True,
             best["hazard_type"],
@@ -359,5 +564,9 @@ def detect_hazard_from_frame(frame):
 
 
 def detect_hazard_from_base64(data_url):
+    """
+    Decode browser camera frame and run hazard detection.
+    """
+
     frame = decode_base64_image(data_url)
     return detect_hazard_from_frame(frame)
