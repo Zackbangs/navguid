@@ -2,19 +2,42 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+
+    <!-- Ensures the landing page works well on phones, tablets, and desktop screens. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <title>NavGuid</title>
+
+    <!-- Keeps your existing external stylesheet connected. -->
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
     <style>
+        /*
+            ======================================================
+            NavGuid Home Page Styling
+            ------------------------------------------------------
+            This page is designed as a voice-first landing screen.
+            The layout supports blind and visually impaired users by:
+            - using high contrast colours
+            - keeping text large and readable
+            - making the main action clear
+            - keeping buttons as fallback, not the primary interaction
+        */
+
         :root {
-            --bg: #08244a;
-            --card: #0e315f;
+            --bg: #061d3d;
+            --bg-soft: #08244a;
+            --card: rgba(255, 255, 255, 0.07);
+            --card-strong: rgba(255, 255, 255, 0.11);
             --accent: #2f6fe4;
             --accent-hover: #275fc4;
             --text: #ffffff;
             --muted: #d7e3ff;
-            --radius: 18px;
             --safe: #8ce99a;
+            --warning: #ffd43b;
+            --border: rgba(255, 255, 255, 0.14);
+            --shadow: rgba(0, 0, 0, 0.28);
+            --radius: 22px;
         }
 
         * {
@@ -23,89 +46,203 @@
 
         body {
             margin: 0;
+            min-height: 100vh;
             font-family: Arial, sans-serif;
-            background: var(--bg);
+            background:
+                radial-gradient(circle at top left, rgba(47, 111, 228, 0.35), transparent 34%),
+                radial-gradient(circle at bottom right, rgba(140, 233, 154, 0.12), transparent 30%),
+                var(--bg);
             color: var(--text);
         }
 
+        .page-shell {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 32px 18px;
+        }
+
         .container {
-            max-width: 760px;
+            width: 100%;
+            max-width: 900px;
             margin: 0 auto;
-            padding: 32px 18px 40px;
-            text-align: center;
         }
 
         .hero-card {
-            background: rgba(255, 255, 255, 0.06);
-            border-radius: 24px;
-            padding: 28px 20px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 30px;
+            padding: 34px 24px;
+            box-shadow: 0 22px 60px var(--shadow);
+            backdrop-filter: blur(12px);
+        }
+
+        .brand-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            margin-bottom: 14px;
+        }
+
+        .brand-mark {
+            width: 52px;
+            height: 52px;
+            border-radius: 18px;
+            background: linear-gradient(135deg, var(--accent), #6ea8ff);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.55rem;
+            font-weight: 800;
+            box-shadow: 0 10px 28px rgba(47, 111, 228, 0.35);
         }
 
         h1 {
-            margin: 0 0 12px;
-            font-size: 2.5rem;
+            margin: 0;
+            font-size: 2.8rem;
+            line-height: 1.1;
+            letter-spacing: -0.04em;
         }
 
         .subtitle {
+            max-width: 720px;
+            margin: 16px auto 22px;
             color: var(--muted);
-            font-size: 1.08rem;
-            line-height: 1.6;
-            margin-bottom: 18px;
+            font-size: 1.1rem;
+            line-height: 1.7;
+            text-align: center;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 4px;
+            padding: 10px 16px;
+            border-radius: 999px;
+            background: rgba(140, 233, 154, 0.15);
+            color: var(--safe);
+            border: 1px solid rgba(140, 233, 154, 0.25);
+            font-weight: 700;
+            font-size: 0.95rem;
+        }
+
+        .status-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: var(--safe);
+            box-shadow: 0 0 12px rgba(140, 233, 154, 0.75);
+        }
+
+        .voice-panel {
+            margin-top: 24px;
+            display: grid;
+            gap: 16px;
         }
 
         .voice-status,
         .voice-help {
-            background: rgba(255, 255, 255, 0.08);
-            border-radius: 16px;
-            padding: 16px;
-            margin-top: 18px;
+            background: var(--card-strong);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 18px;
             color: var(--muted);
-            line-height: 1.6;
+            line-height: 1.7;
             text-align: left;
+        }
+
+        .voice-status {
+            text-align: center;
+            color: var(--text);
+            font-size: 1.35rem;
+            font-weight: 800;
         }
 
         .voice-help strong {
             color: var(--text);
         }
 
-        .status-pill {
-            display: inline-block;
-            margin-top: 14px;
-            padding: 10px 14px;
-            border-radius: 999px;
-            background: rgba(140, 233, 154, 0.16);
-            color: var(--safe);
+        .command-list {
+            margin-top: 10px;
+            display: grid;
+            gap: 10px;
+        }
+
+        .command-item {
+            padding: 12px 14px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.07);
+            color: var(--text);
             font-weight: 700;
-            font-size: 0.95rem;
+        }
+
+        .button-row {
+            margin-top: 22px;
+            display: grid;
+            gap: 14px;
         }
 
         .button,
         button {
             display: inline-block;
             width: 100%;
-            margin-top: 20px;
             padding: 18px 20px;
             border: none;
             border-radius: 18px;
             background: var(--accent);
             color: white;
             font-size: 1.15rem;
-            font-weight: 700;
+            font-weight: 800;
             text-decoration: none;
             cursor: pointer;
+            transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+            box-shadow: 0 12px 28px rgba(47, 111, 228, 0.28);
         }
 
         .button:hover,
         button:hover {
             background: var(--accent-hover);
+            transform: translateY(-1px);
         }
 
         .secondary-btn {
             background: rgba(255, 255, 255, 0.12);
+            box-shadow: none;
+            border: 1px solid var(--border);
         }
 
         .secondary-btn:hover {
             background: rgba(255, 255, 255, 0.18);
+        }
+
+        .feature-grid {
+            margin-top: 24px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 14px;
+        }
+
+        .feature-card {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 16px;
+            text-align: left;
+        }
+
+        .feature-title {
+            color: var(--text);
+            font-weight: 800;
+            margin-bottom: 8px;
+        }
+
+        .feature-text {
+            color: var(--muted);
+            font-size: 0.95rem;
+            line-height: 1.55;
         }
 
         .support-note {
@@ -113,64 +250,152 @@
             color: var(--muted);
             font-size: 0.96rem;
             line-height: 1.6;
+            text-align: center;
         }
 
-        @media (max-width: 640px) {
+        @media (max-width: 760px) {
+            .hero-card {
+                padding: 28px 18px;
+            }
+
             h1 {
-                font-size: 2rem;
+                font-size: 2.25rem;
             }
 
             .subtitle {
                 font-size: 1rem;
             }
+
+            .voice-status {
+                font-size: 1.18rem;
+            }
+
+            .feature-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .brand-row {
+                flex-direction: column;
+            }
         }
     </style>
 </head>
+
 <body>
-    <div class="container">
-        <div class="hero-card">
-            <h1>NavGuid</h1>
+    <main class="page-shell">
+        <div class="container">
+            <section class="hero-card" aria-label="NavGuid voice-first landing page">
 
-            <div class="subtitle">
-                Voice-first indoor and outdoor navigation for blind and visually impaired users,
-                with spoken guidance and live hazard support.
-            </div>
+                <!-- Brand section for a more professional demo introduction. -->
+                <div class="brand-row">
+                    <div class="brand-mark" aria-hidden="true">N</div>
+                    <h1>NavGuid</h1>
+                </div>
 
-            <div class="status-pill" id="homeModeStatus">Ready</div>
+                <p class="subtitle">
+                    A voice-first assistive navigation prototype for blind and visually impaired users.
+                    NavGuid supports indoor guidance, outdoor walking navigation, and live hazard awareness.
+                </p>
 
-            <div class="voice-status" id="homeVoiceStatus" aria-live="polite">
-                Welcome to NavGuid. Where do you want to go?
-            </div>
+                <div class="status-pill" id="homeModeStatus" aria-live="polite">
+                    <span class="status-dot" aria-hidden="true"></span>
+                    Ready
+                </div>
 
-            <div class="voice-help">
-                <strong>Try saying:</strong><br>
-                “Indoor navigation”<br>
-                “Take me to Marion Shopping Centre”<br>
-                “Take me to Adelaide Railway Station”
-            </div>
+                <div class="voice-panel">
 
-            <button id="activateVoiceBtn" onclick="activateHomeVoice()">
-                Start Voice Assistant
-            </button>
+                    <!-- Main voice prompt shown visually and also spoken through speech synthesis. -->
+                    <div class="voice-status" id="homeVoiceStatus" aria-live="polite">
+                        Welcome to NavGuid. Where do you want to go?
+                    </div>
 
-            <a class="button secondary-btn" id="continueBtn" href="{{ url_for('navigation_page') }}">
-                Open Navigation Screen
-            </a>
+                    <!-- Example commands help during demo and keep the flow clear for users. -->
+                    <div class="voice-help">
+                        <strong>Voice commands you can try:</strong>
 
-            <div class="support-note">
-                Voice is the main experience. The buttons remain available only as a fallback when the phone browser
-                requires one first tap for microphone access.
-            </div>
+                        <div class="command-list">
+                            <div class="command-item">“Indoor navigation”</div>
+                            <div class="command-item">“Take me to Marion Shopping Centre”</div>
+                            <div class="command-item">“Take me to Adelaide Railway Station”</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Buttons remain as fallback because most mobile browsers require one tap for microphone access. -->
+                <div class="button-row">
+                    <button id="activateVoiceBtn" onclick="activateHomeVoice()">
+                        Start Voice Assistant
+                    </button>
+
+                    <a class="button secondary-btn" id="continueBtn" href="{{ url_for('navigation_page') }}">
+                        Open Navigation Screen
+                    </a>
+                </div>
+
+                <!-- Feature cards make the first page look more complete and presentation-ready. -->
+                <div class="feature-grid" aria-label="NavGuid key features">
+                    <div class="feature-card">
+                        <div class="feature-title">Voice-first control</div>
+                        <div class="feature-text">
+                            Users can begin navigation by speaking instead of relying on visual buttons.
+                        </div>
+                    </div>
+
+                    <div class="feature-card">
+                        <div class="feature-title">Outdoor guidance</div>
+                        <div class="feature-text">
+                            Uses GPS and route instructions to support spoken walking navigation.
+                        </div>
+                    </div>
+
+                    <div class="feature-card">
+                        <div class="feature-title">Hazard awareness</div>
+                        <div class="feature-text">
+                            Camera-based detection supports real-time obstacle and hazard alerts.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="support-note">
+                    Voice is the main experience. The buttons are kept only as a fallback when the browser
+                    requires one first tap to allow microphone access.
+                </div>
+            </section>
         </div>
-    </div>
+    </main>
 
     <script>
+        /*
+            ======================================================
+            NavGuid Home Page Script
+            ------------------------------------------------------
+            This script controls the first user interaction.
+            It listens for a voice command and sends the user to
+            the navigation page with URL parameters.
+
+            Example:
+            - User says: "Indoor navigation"
+              App opens: /navigation?mode=indoor&autostart=1
+
+            - User says: "Take me to Marion Shopping Centre"
+              App opens:
+              /navigation?mode=outdoor&destination=marion shopping centre&autostart=1
+        */
+
+        // Home page speech recognition state.
         let homeRecognition = null;
         let homeRecognitionActive = false;
         let homeManualStop = false;
+
+        // Text-to-speech voice state.
         let preferredVoice = null;
         let introSpoken = false;
 
+        /*
+            Selects the most natural English voice available on the device.
+            The exact voice depends on the phone/browser, so this function
+            chooses the best available fallback.
+        */
         function initialiseVoices() {
             if (!("speechSynthesis" in window)) return;
 
@@ -190,8 +415,13 @@
             initialiseVoices();
         }
 
+        /*
+            Splits longer spoken messages into smaller parts.
+            This helps mobile browsers speak more clearly without cutting off audio.
+        */
         function splitSpeechIntoChunks(text) {
             if (!text) return [];
+
             return text
                 .replace(/\s+/g, " ")
                 .trim()
@@ -199,6 +429,10 @@
                 .filter(Boolean);
         }
 
+        /*
+            Speaks text using the browser's speech synthesis engine.
+            priority=true cancels previous speech before speaking the new message.
+        */
         function speakText(text, priority = false, options = {}) {
             if (!("speechSynthesis" in window) || !text) return;
 
@@ -235,14 +469,21 @@
             speakChunk(0);
         }
 
+        // Updates the visible voice status message.
         function setHomeVoiceStatus(text) {
             document.getElementById("homeVoiceStatus").textContent = text;
         }
 
+        // Updates the current mode pill.
         function setHomeModeStatus(text) {
-            document.getElementById("homeModeStatus").textContent = text;
+            const status = document.getElementById("homeModeStatus");
+            status.innerHTML = `<span class="status-dot" aria-hidden="true"></span>${text}`;
         }
 
+        /*
+            Opens the Flask navigation page and passes mode/destination values
+            through the URL without changing the project structure.
+        */
         function goToNavigation(params = {}) {
             const url = new URL("{{ url_for('navigation_page') }}", window.location.origin);
 
@@ -255,6 +496,14 @@
             window.location.href = url.toString();
         }
 
+        /*
+            Starts browser speech recognition.
+            This listens for:
+            - "indoor navigation"
+            - "outdoor navigation"
+            - "take me to [destination]"
+            - "navigate to [destination]"
+        */
         function startHomeVoiceRecognition() {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -283,6 +532,7 @@
             } catch (error) {
                 homeRecognitionActive = false;
                 setHomeVoiceStatus("Microphone could not start. Tap Start Voice Assistant and try again.");
+                setHomeModeStatus("Ready");
                 return;
             }
 
@@ -293,6 +543,7 @@
                 if (transcript.includes("indoor navigation")) {
                     setHomeModeStatus("Indoor navigation");
                     speakText("Alright. Opening indoor navigation now.", true);
+
                     goToNavigation({
                         mode: "indoor",
                         autostart: "1"
@@ -315,6 +566,7 @@
 
                     setHomeModeStatus("Outdoor navigation");
                     speakText(`Alright. Taking you to ${destination}.`, true);
+
                     goToNavigation({
                         mode: "outdoor",
                         destination: destination,
@@ -326,6 +578,7 @@
                 if (transcript.includes("outdoor navigation")) {
                     setHomeModeStatus("Outdoor navigation");
                     speakText("Alright. Tell me where you want to go.", true);
+
                     goToNavigation({
                         mode: "outdoor",
                         autostart: "1"
@@ -339,6 +592,7 @@
 
             homeRecognition.onerror = function() {
                 homeRecognitionActive = false;
+
                 if (!homeManualStop) {
                     setHomeVoiceStatus("Voice input failed. Tap Start Voice Assistant and try again.");
                     setHomeModeStatus("Listening error");
@@ -347,12 +601,14 @@
 
             homeRecognition.onend = function() {
                 homeRecognitionActive = false;
+
                 if (!homeManualStop) {
                     setHomeModeStatus("Ready");
                 }
             };
         }
 
+        // Restarts listening after unclear speech.
         function restartHomeVoiceLoop() {
             setTimeout(() => {
                 if (!homeManualStop && !homeRecognitionActive) {
@@ -361,14 +617,24 @@
             }, 900);
         }
 
+        /*
+            Main button fallback.
+            It starts the voice-first flow after the browser receives one user interaction.
+        */
         function activateHomeVoice() {
             if (!introSpoken) {
                 introSpoken = true;
                 speakText("Welcome to NavGuid. Where do you want to go?", true);
             }
+
             startHomeVoiceRecognition();
         }
 
+        /*
+            Speaks the welcome prompt on page load.
+            Some browsers may block automatic audio until the user taps,
+            but this still supports desktop and demo environments.
+        */
         window.addEventListener("load", function() {
             setHomeModeStatus("Ready");
 
