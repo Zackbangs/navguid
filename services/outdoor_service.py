@@ -1,13 +1,42 @@
 import requests
 
 
+"""
+NavGuid Outdoor Navigation Service
+----------------------------------
+
+This file handles the outdoor navigation backend logic.
+
+It is responsible for:
+1. Searching a destination using Nominatim / OpenStreetMap
+2. Requesting a walking route from OSRM
+3. Converting OSRM route steps into simple spoken instructions
+4. Returning route steps, step coordinates, destination coordinates, and route geometry
+
+"""
+
+
 def search_destination(destination_query):
+    """
+    Search for a destination using Nominatim.
+
+    Example:
+        "Marion Shopping Centre"
+
+    Returns:
+        A dictionary containing the destination name, latitude, and longitude.
+        Returns None if no result is found.
+    """
+
     url = "https://nominatim.openstreetmap.org/search"
+
     params = {
         "q": destination_query,
         "format": "jsonv2",
         "limit": 1
     }
+
+    # User-Agent is required by Nominatim usage policy.
     headers = {
         "User-Agent": "NavGuid/1.0"
     }
@@ -28,14 +57,39 @@ def search_destination(destination_query):
 
 
 def _clean_street_name(street_name):
+    """
+    Clean street names before using them in spoken instructions.
+    """
+
     return (street_name or "").strip()
 
 
 def _round_distance(step):
+    """
+    Round OSRM step distance to a clean whole number.
+
+    This makes spoken guidance easier to understand.
+    """
+
     return max(0, round(step.get("distance", 0)))
 
 
 def _build_spoken_instruction(step):
+    """
+    Convert a single OSRM step into a natural spoken instruction.
+
+    OSRM returns technical route data such as:
+    - maneuver type
+    - turn modifier
+    - street name
+    - distance
+
+    This function converts that into user-friendly speech such as:
+    - "Keep going straight"
+    - "Turn left in about 20 metres"
+    - "You have arrived at your destination"
+    """
+
     maneuver = step.get("maneuver", {})
     maneuver_type = maneuver.get("type", "continue")
     modifier = (maneuver.get("modifier", "") or "").replace("_", " ").strip()
@@ -78,6 +132,7 @@ def _build_spoken_instruction(step):
     if maneuver_type == "arrive":
         return "You have arrived at your destination."
 
+    # Fallback for uncommon OSRM maneuver types.
     if street_name:
         return f"{maneuver_type.replace('_', ' ').title()} on {street_name} for about {distance} metres."
 
@@ -85,6 +140,19 @@ def _build_spoken_instruction(step):
 
 
 def build_osrm_steps_and_data(route_data):
+    """
+    Extract spoken route steps and coordinate-based step data from OSRM response.
+
+    The frontend uses:
+    - steps_output for readable route instructions
+    - step_data for live GPS step tracking
+
+    step_data includes each maneuver location so the frontend can detect:
+    - when the user is near a step
+    - when to say "turn now"
+    - when to move to the next instruction
+    """
+
     steps_output = []
     step_data = []
 
@@ -100,8 +168,10 @@ def build_osrm_steps_and_data(route_data):
         for step in leg.get("steps", []):
             maneuver = step.get("maneuver", {})
             location = maneuver.get("location", [])
+
             spoken_instruction = _build_spoken_instruction(step)
 
+            # OSRM location format is [longitude, latitude].
             lat = float(location[1]) if len(location) == 2 else None
             lon = float(location[0]) if len(location) == 2 else None
 
@@ -116,12 +186,16 @@ def build_osrm_steps_and_data(route_data):
                 "street_name": _clean_street_name(step.get("name", "")),
                 "distance_m": _round_distance(step),
                 "duration_s": round(step.get("duration", 0)),
+
+                # Bearings are kept for future direction/orientation upgrades.
                 "bearing_before": maneuver.get("bearing_before"),
                 "bearing_after": maneuver.get("bearing_after")
             })
 
+    # Add a final arrival step so the frontend has a clear endpoint instruction.
     if steps_output:
         steps_output.append("You have arrived at your destination.")
+
         step_data.append({
             "instruction": "You have arrived at your destination.",
             "lat": None,
@@ -139,12 +213,23 @@ def build_osrm_steps_and_data(route_data):
 
 
 def build_route_geometry(route):
+    """
+    Convert OSRM route geometry into a frontend-friendly list of coordinates.
+
+    The geometry can be used later for:
+    - drawing the route line
+    - checking if the user has moved away from the route
+    - future rerouting improvements
+    """
+
     geometry = route.get("geometry", {})
     coordinates = geometry.get("coordinates", [])
 
     output = []
+
     for coord in coordinates:
         if len(coord) == 2:
+            # OSRM coordinate format is [longitude, latitude].
             output.append({
                 "lat": float(coord[1]),
                 "lon": float(coord[0])
@@ -154,7 +239,21 @@ def build_route_geometry(route):
 
 
 def get_outdoor_route(start_lat, start_lon, destination_query):
+    """
+    Main outdoor navigation function.
+
+    This function:
+    1. Finds the destination coordinates
+    2. Requests a walking route from OSRM
+    3. Builds spoken step instructions
+    4. Returns route data to the Flask route /outdoor-navigate
+
+    The returned structure is kept stable so the frontend navigation page
+    does not need to change.
+    """
+
     try:
+        # Step 1: Search for destination coordinates.
         destination = search_destination(destination_query)
 
         if not destination:
@@ -166,6 +265,8 @@ def get_outdoor_route(start_lat, start_lon, destination_query):
         dest_lat = destination["lat"]
         dest_lon = destination["lon"]
 
+        # Step 2: Build OSRM walking route request.
+        # OSRM requires coordinates in longitude,latitude order.
         osrm_url = (
             f"https://router.project-osrm.org/route/v1/foot/"
             f"{start_lon},{start_lat};{dest_lon},{dest_lat}"
@@ -188,10 +289,12 @@ def get_outdoor_route(start_lat, start_lon, destination_query):
                 "message": "Could not generate walking route."
             }
 
+        # Step 3: Extract the first route.
         route = route_data["routes"][0]
         distance_m = round(route.get("distance", 0))
         duration_s = round(route.get("duration", 0))
 
+        # Step 4: Build frontend-ready navigation data.
         steps, step_data = build_osrm_steps_and_data(route_data)
         route_geometry = build_route_geometry(route)
 
@@ -214,6 +317,7 @@ def get_outdoor_route(start_lat, start_lon, destination_query):
             "success": False,
             "message": "Network error while contacting map services."
         }
+
     except Exception as e:
         return {
             "success": False,
