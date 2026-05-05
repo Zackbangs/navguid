@@ -1,3 +1,4 @@
+/* Global colour, spacing, shadow, and radius settings */
 :root {
     --bg-main: #edf3fb;
     --bg-card: #ffffff;
@@ -19,15 +20,15 @@
     --radius-md: 14px;
     --radius-sm: 12px;
 }
-
+/* Makes padding and borders easier to control across all elements */
 * {
     box-sizing: border-box;
 }
-
+/* Enables smooth scrolling when moving between page sections */
 html {
     scroll-behavior: smooth;
 }
-
+/* Main page layout and background design */
 body {
     font-family: Arial, sans-serif;
     background:
@@ -38,7 +39,7 @@ body {
     padding: 18px;
     color: var(--text-main);
 }
-
+/* Main content wrapper */
 .container {
     max-width: 980px;
     margin: 18px auto;
@@ -49,7 +50,7 @@ body {
     box-shadow: var(--shadow-main);
     backdrop-filter: blur(6px);
 }
-
+/* Shared heading styling */
 h1,
 h2,
 h3,

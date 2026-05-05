@@ -2,10 +2,17 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+
+<!-- Makes the page responsive on phones and tablets -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <title>NavGuid Live Navigation</title>
 
 <style>
+/* ===============================
+   GLOBAL THEME VARIABLES
+   Controls main colours, spacing, and rounded corners
+   =============================== */
 :root {
     --bg: #08244a;
     --card: #0e315f;
@@ -19,10 +26,12 @@
     --radius: 18px;
 }
 
+/* Keeps padding and borders inside element width */
 * {
     box-sizing: border-box;
 }
 
+/* Main page style */
 body {
     margin: 0;
     font-family: Arial, sans-serif;
@@ -30,6 +39,7 @@ body {
     color: var(--text);
 }
 
+/* Main content container */
 .container {
     max-width: 900px;
     margin: auto;
@@ -46,6 +56,7 @@ h1 {
     margin-bottom: 16px;
 }
 
+/* Reusable card layout for each section */
 .card {
     background: rgba(255,255,255,0.07);
     padding: 18px;
@@ -60,6 +71,7 @@ h1 {
     color: var(--muted);
 }
 
+/* Large guidance text box */
 .main-status {
     font-size: 1.5rem;
     font-weight: bold;
@@ -72,6 +84,7 @@ h1 {
     line-height: 1.5;
 }
 
+/* Hazard status text */
 .hazard {
     font-size: 1.15rem;
     font-weight: bold;
@@ -85,6 +98,7 @@ h1 {
     color: var(--danger);
 }
 
+/* Main button style */
 button {
     width: 100%;
     margin-top: 10px;
@@ -101,6 +115,7 @@ button:hover {
     background: var(--accent-hover);
 }
 
+/* Secondary button style */
 .secondary {
     background: rgba(255,255,255,0.14);
 }
@@ -109,6 +124,7 @@ button:hover {
     background: rgba(255,255,255,0.22);
 }
 
+/* Stop everything button style */
 .danger-btn {
     background: #b42323;
 }
@@ -117,6 +133,7 @@ button:hover {
     background: #941b1b;
 }
 
+/* Camera container used for the live video and overlay canvas */
 .camera-wrap {
     position: relative;
     width: 100%;
@@ -131,6 +148,7 @@ video {
     display: block;
 }
 
+/* Canvas sits over the video to draw hazard detection boxes */
 #overlayCanvas {
     position: absolute;
     left: 0;
@@ -140,10 +158,12 @@ video {
     pointer-events: none;
 }
 
+/* Hides panels until needed */
 .hidden {
     display: none;
 }
 
+/* Indoor navigation input fields */
 select, input {
     width: 100%;
     margin-top: 8px;
@@ -157,12 +177,14 @@ select, input {
     line-height: 1.6;
 }
 
+/* Button layout */
 .button-grid {
     display: grid;
     grid-template-columns: 1fr;
     gap: 8px;
 }
 
+/* Uses two-column buttons on larger screens */
 @media (min-width: 720px) {
     .button-grid {
         grid-template-columns: 1fr 1fr;
@@ -174,9 +196,11 @@ select, input {
 <body>
 <div class="container">
 
+    <!-- Page heading -->
     <h1>NavGuid</h1>
     <div class="subtitle">Voice-first indoor and outdoor assistive navigation</div>
 
+    <!-- Shows microphone and speech recognition status -->
     <div class="card">
         <div class="card-title">Voice Status</div>
         <div id="voiceStatus" class="status-text">
@@ -184,6 +208,7 @@ select, input {
         </div>
     </div>
 
+    <!-- Shows whether the app is in indoor, outdoor, or waiting mode -->
     <div class="card">
         <div class="card-title">Mode Status</div>
         <div id="modeText" class="status-text">
@@ -191,6 +216,7 @@ select, input {
         </div>
     </div>
 
+    <!-- Main spoken navigation instruction shown visually -->
     <div class="card main-status">
         <div class="card-title">Current Guidance</div>
         <div id="navText">
@@ -198,6 +224,7 @@ select, input {
         </div>
     </div>
 
+    <!-- Hazard detection status -->
     <div class="card">
         <div class="card-title">Hazard Status</div>
         <div id="hazardText" class="hazard safe">
@@ -205,6 +232,7 @@ select, input {
         </div>
     </div>
 
+    <!-- Live camera view and hazard overlay -->
     <div class="card">
         <div class="card-title">Camera Feed + Hazard Overlay</div>
         <div class="camera-wrap">
@@ -213,8 +241,10 @@ select, input {
         </div>
     </div>
 
+    <!-- Route summary appears after route generation -->
     <div id="routeSummary" class="card route-summary hidden"></div>
 
+    <!-- Indoor navigation form appears only when indoor mode is selected -->
     <div id="indoorPanel" class="card hidden">
         <div class="card-title">Indoor Navigation</div>
 
@@ -233,6 +263,7 @@ select, input {
         <button onclick="startIndoorNavigation()">Start Indoor Route</button>
     </div>
 
+    <!-- Main control buttons -->
     <div class="card">
         <div class="card-title">Controls</div>
         <div class="button-grid">
@@ -245,10 +276,12 @@ select, input {
 
 </div>
 
-<!-- Keep your existing navigation.html structure.
-Only replace your current <script>...</script> section with this upgraded v4 script. -->
-
 <script>
+/* ===============================
+   GLOBAL STATE VARIABLES
+   Stores voice, camera, hazard, route, and tracking states
+   =============================== */
+
 let recognition = null;
 let recognitionActive = false;
 let voiceAssistantActive = false;
@@ -282,6 +315,11 @@ let lastTurnVibrationKey = "";
 let detectionFrameWidth = null;
 let detectionFrameHeight = null;
 
+/* ===============================
+   CONFIGURATION CONSTANTS
+   Controls hazard timing, GPS thresholds, detection quality, and speech cooldowns
+   =============================== */
+
 const HAZARD_COOLDOWN_MS = 4800;
 const VIBRATION_COOLDOWN_MS = 3000;
 const DESTINATION_ARRIVAL_THRESHOLD_M = 14;
@@ -294,9 +332,19 @@ const DETECTION_INTERVAL_MS = 2000;
 const DETECTION_FRAME_MAX_WIDTH = 640;
 const DETECTION_JPEG_QUALITY = 0.62;
 
+/* ===============================
+   BASIC UI HELPER FUNCTIONS
+   Updates page text, status messages, and hazard display
+   =============================== */
+
 function byId(id) {
     return document.getElementById(id);
 }
+
+/* ===============================
+   VIBRATION FEEDBACK FUNCTIONS
+   Provides physical feedback for hazards, turns, stops, and arrivals
+   =============================== */
 
 function vibrate(pattern, key = "default", force = false) {
     try {
@@ -334,6 +382,11 @@ function vibrateForHazard(severity, distanceLabel, directionLabel, hazardType) {
 
     vibrate([70], key);
 }
+
+/* ===============================
+   SPEECH SYNTHESIS FUNCTIONS
+   Selects a voice and speaks navigation instructions aloud
+   =============================== */
 
 function initialiseVoices() {
     if (!("speechSynthesis" in window)) return;
@@ -406,6 +459,11 @@ function speakGuidance(text, priority = false) {
     speakText(text, priority, { rate: 0.88, pauseMs: 260 });
 }
 
+/* ===============================
+   HAZARD ALERT CONTROL
+   Prevents repeated warnings and controls hazard speech timing
+   =============================== */
+
 function getHazardKey(data) {
     return [
         data.hazard_type || "hazard",
@@ -460,6 +518,11 @@ function speakHazard(text, data, priority = true) {
     speakText(text, priority, { rate: 0.86, pauseMs: 180 });
 }
 
+/* ===============================
+   UI STATUS FUNCTIONS
+   Updates the visible text shown to the user
+   =============================== */
+
 function setVoiceStatus(text) {
     const el = byId("voiceStatus");
     if (el) el.textContent = text;
@@ -489,6 +552,11 @@ function setHazardText(text, mode = "normal") {
     }
 }
 
+/* ===============================
+   TEXT AND URL HELPER FUNCTIONS
+   Cleans navigation text and reads page URL settings
+   =============================== */
+
 function normaliseStepText(step) {
     if (!step) return "Keep going straight.";
 
@@ -515,6 +583,11 @@ function getAutoStartConfig() {
     };
 }
 
+/* ===============================
+   LOCATION ACCESS FUNCTION
+   Gets the user's current GPS position
+   =============================== */
+
 function getCurrentLocationPromise() {
     return new Promise((resolve, reject) => {
         if (!navigator.geolocation) {
@@ -529,6 +602,11 @@ function getCurrentLocationPromise() {
         });
     });
 }
+
+/* ===============================
+   CAMERA AND OVERLAY FUNCTIONS
+   Starts the phone camera and manages the hazard overlay canvas
+   =============================== */
 
 async function startBackCamera() {
     const video = byId("cameraFeed");
@@ -596,6 +674,11 @@ function getBoxColor(severity) {
     return "#8ce99a";
 }
 
+/* ===============================
+   HAZARD MESSAGE FUNCTIONS
+   Converts backend detection data into clear user-friendly warnings
+   =============================== */
+
 function humanDirection(directionLabel) {
     if (directionLabel === "left") return "left side";
     if (directionLabel === "right") return "right side";
@@ -644,6 +727,11 @@ function buildSmarterHazardMessage(data) {
 
     return `Careful. ${type} ${distance}, on your ${direction}.`;
 }
+
+/* ===============================
+   HAZARD DRAWING AND DETECTION FUNCTIONS
+   Draws detection boxes and sends frames to the Flask backend
+   =============================== */
 
 function drawDetections(detections) {
     const video = byId("cameraFeed");
@@ -797,6 +885,11 @@ function stopHazardMonitoring() {
     setHazardText("Hazard monitoring stopped", "safe");
 }
 
+/* ===============================
+   PANEL DISPLAY FUNCTIONS
+   Shows or hides indoor navigation and route summary sections
+   =============================== */
+
 function hideIndoorPanel() {
     const panel = byId("indoorPanel");
     if (panel) panel.classList.add("hidden");
@@ -822,6 +915,11 @@ function showRouteSummary(html) {
     panel.classList.remove("hidden");
     panel.innerHTML = html;
 }
+
+/* ===============================
+   VOICE RECOGNITION FUNCTIONS
+   Listens for spoken commands and sends them to command handling
+   =============================== */
 
 function startVoiceRecognition() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -948,6 +1046,11 @@ async function handleVoiceCommand(transcript) {
     }
 }
 
+/* ===============================
+   NAVIGATION CONTROL FUNCTIONS
+   Stops, resets, or clears navigation and voice assistant states
+   =============================== */
+
 function stopVoiceRecognition() {
     manualStop = true;
     voiceAssistantActive = false;
@@ -1041,6 +1144,11 @@ function stopAll() {
     vibrate([160, 80, 160], "stop_all", true);
 }
 
+/* ===============================
+   GPS DISTANCE FUNCTIONS
+   Calculates distance between the user, steps, and destination
+   =============================== */
+
 function toRadians(value) {
     return value * Math.PI / 180;
 }
@@ -1101,6 +1209,11 @@ function findBestCurrentStepIndex(userLat, userLon) {
 
     return bestIndex;
 }
+
+/* ===============================
+   LIVE OUTDOOR GUIDANCE FUNCTIONS
+   Builds real-time spoken instructions based on user GPS position
+   =============================== */
 
 function buildLiveInstruction(step, distanceToStep, destinationDistance = null) {
     if (!step) return "Keep going straight.";
@@ -1190,6 +1303,11 @@ function shouldSpeakGuidance(key, force = false) {
 
     return false;
 }
+
+/* ===============================
+   INDOOR AND OUTDOOR NAVIGATION STARTERS
+   Starts indoor building routes or outdoor GPS-based routes
+   =============================== */
 
 function activateIndoorMode(announce = false) {
     currentMode = "indoor";
@@ -1327,6 +1445,11 @@ async function startIndoorNavigation() {
     }
 }
 
+/* ===============================
+   LIVE GPS TRACKING FUNCTIONS
+   Watches the user's location and updates turn-by-turn guidance
+   =============================== */
+
 function startStepTracking() {
     stopTracking();
 
@@ -1417,6 +1540,11 @@ function handleLiveTracking(position) {
     }
 }
 
+/* ===============================
+   USER ACTION FUNCTIONS
+   Handles button actions such as start, repeat, and voice navigation
+   =============================== */
+
 function repeatCurrentInstruction() {
     const text = byId("navText")?.textContent || "";
 
@@ -1434,6 +1562,11 @@ async function startNavigation() {
     speakGuidance("Welcome to NavGuid. Where do you want to go?", true);
     startVoiceRecognition();
 }
+
+/* ===============================
+   PAGE STARTUP FUNCTIONS
+   Handles auto-start settings from the landing page URL
+   =============================== */
 
 function runIncomingVoiceFlowFromUrl() {
     const config = getAutoStartConfig();
@@ -1471,8 +1604,10 @@ function runIncomingVoiceFlowFromUrl() {
     }
 }
 
+/* Keeps the hazard overlay aligned when the screen size changes */
 window.addEventListener("resize", syncOverlaySize);
 
+/* Initialises the page when it first loads */
 window.addEventListener("load", function() {
     if (introHasRun) return;
     introHasRun = true;

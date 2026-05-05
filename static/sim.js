@@ -1,3 +1,4 @@
+// Stores fixed canvas positions for each building map node.
 const mapLayouts = {
     torrens: {
         ENTRANCE: { x: 90, y: 210 },
@@ -16,6 +17,7 @@ const mapLayouts = {
     }
 };
 
+// Main drawing function used by the frontend to render the selected building map.
 window.drawMap = function (buildingName, path = [], nodes = {}) {
     const canvas = document.getElementById("mapCanvas");
     if (!canvas) return;
@@ -24,21 +26,25 @@ window.drawMap = function (buildingName, path = [], nodes = {}) {
     const layout = mapLayouts[buildingName];
     if (!layout) return;
 
+    // Prepares the canvas size and clears old drawings before redrawing.
     resizeCanvasForScreen(canvas);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+    // Draws the map layers in order: background, connections, selected path, then nodes.
     drawBackground(ctx, canvas);
     drawConnections(ctx, buildingName, layout);
     drawPath(ctx, layout, path);
     drawNodes(ctx, layout, nodes, path);
 };
 
+// Adjusts canvas size for mobile and desktop screens.
 function resizeCanvasForScreen(canvas) {
     const isMobile = window.innerWidth < 640;
     canvas.width = isMobile ? 900 : 760;
     canvas.height = isMobile ? 500 : 420;
 }
 
+// Draws the base floor area and border of the map.
 function drawBackground(ctx, canvas) {
     ctx.fillStyle = "#f9fbfd";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -51,6 +57,7 @@ function drawBackground(ctx, canvas) {
     ctx.strokeRect(50, 120, canvas.width - 100, 220);
 }
 
+// Draws all default building connections between nodes.
 function drawConnections(ctx, buildingName, layout) {
     const edgePairs = getEdgePairs(buildingName);
 
@@ -70,6 +77,7 @@ function drawConnections(ctx, buildingName, layout) {
     });
 }
 
+// Highlights the active navigation route selected by the user.
 function drawPath(ctx, layout, path) {
     if (!path || path.length < 2) return;
 
@@ -89,6 +97,7 @@ function drawPath(ctx, layout, path) {
     }
 }
 
+// Draws each location node, including labels, start marker, and destination colour.
 function drawNodes(ctx, layout, nodes, path) {
     Object.keys(layout).forEach(nodeId => {
         const point = layout[nodeId];
@@ -97,11 +106,13 @@ function drawNodes(ctx, layout, nodes, path) {
         const isDestination = path.length > 0 && path[path.length - 1] === nodeId;
         const label = nodes[nodeId]?.label || nodeId;
 
+        // Uses different colours for normal, active, and destination nodes.
         ctx.beginPath();
         ctx.fillStyle = isDestination ? "#059669" : isActive ? "#2563eb" : "#16395f";
         ctx.arc(point.x, point.y, 18, 0, Math.PI * 2);
         ctx.fill();
 
+        // Adds a ring around the starting node.
         if (isStart) {
             ctx.beginPath();
             ctx.strokeStyle = "#f59e0b";
@@ -110,17 +121,20 @@ function drawNodes(ctx, layout, nodes, path) {
             ctx.stroke();
         }
 
+        // Draws the centre marker inside each node.
         ctx.fillStyle = "#ffffff";
         ctx.font = "bold 11px Arial";
         ctx.textAlign = "center";
         ctx.fillText("●", point.x, point.y + 4);
 
+        // Draws the readable label above each node.
         ctx.fillStyle = "#1d2733";
         ctx.font = "16px Arial";
         ctx.fillText(label, point.x, point.y - 28);
     });
 }
 
+// Returns the connection layout for each building.
 function getEdgePairs(buildingName) {
     if (buildingName === "shopping_centre") {
         return [
@@ -140,6 +154,7 @@ function getEdgePairs(buildingName) {
     ];
 }
 
+// Redraws the map when the screen size changes.
 window.addEventListener("resize", function () {
     const building = document.getElementById("building");
     if (!building) return;

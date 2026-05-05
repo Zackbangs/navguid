@@ -20,19 +20,29 @@ Main goals:
 """
 
 
+# Allows PyTorch to safely load the YOLO DetectionModel class.
+# This helps prevent model-loading errors in some deployment environments.
 torch.serialization.add_safe_globals([DetectionModel])
 
+# Gets the main project directory by moving one level up from this file.
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
+# Defines the preferred YOLO model and a smaller fallback model.
 PRIMARY_MODEL_PATH = os.path.join(BASE_DIR, "yolov8m.pt")
 FALLBACK_MODEL_PATH = os.path.join(BASE_DIR, "yolov8n.pt")
 
+# Uses yolov8m.pt if available; otherwise, falls back to yolov8n.pt.
 MODEL_PATH = PRIMARY_MODEL_PATH if os.path.exists(PRIMARY_MODEL_PATH) else FALLBACK_MODEL_PATH
 
+# Global model instance. It is loaded only once for better performance.
 model = None
+
+# Stores YOLO class IDs that match the target hazard classes.
 TARGET_CLASS_IDS = None
 
 
+# Defines the objects the system should treat as possible hazards.
+# Each object maps to a severity level and a user-friendly spoken label.
 TARGET_CLASSES = {
     "person": ("warning", "Person"),
 
@@ -63,12 +73,16 @@ TARGET_CLASSES = {
 }
 
 
+# General YOLO detection settings.
+# Lower confidence improves sensitivity, while class-specific filters reduce false alerts.
 CONFIDENCE_THRESHOLD = 0.20
 IOU_THRESHOLD = 0.48
 PREDICT_IMGSZ = 576
 MAX_RETURNED_DETECTIONS = 8
 
 
+# Minimum confidence required for each object class.
+# Person detection is slightly higher to reduce false positives.
 CLASS_MIN_CONFIDENCE = {
     "person": 0.32,
 
@@ -99,6 +113,8 @@ CLASS_MIN_CONFIDENCE = {
 }
 
 
+# Minimum object size required before it is treated as relevant.
+# This helps ignore tiny objects that are far away or likely false detections.
 CLASS_MIN_AREA_RATIO = {
     "person": 0.0014,
 
@@ -130,6 +146,7 @@ CLASS_MIN_AREA_RATIO = {
 
 
 def get_model():
+    # Loads the YOLO model only once and reuses it for later detections.
     global model
 
     if model is None:
@@ -139,6 +156,8 @@ def get_model():
 
 
 def _build_target_class_ids():
+    # Converts target class names into YOLO class IDs.
+    # This allows prediction to focus only on useful hazard-related classes.
     global TARGET_CLASS_IDS
 
     if TARGET_CLASS_IDS is not None:
@@ -154,6 +173,7 @@ def _build_target_class_ids():
 
 
 def decode_base64_image(data_url: str):
+    # Converts a base64 camera image from the browser into an OpenCV image frame.
     if not data_url or "," not in data_url:
         return None
 
@@ -167,6 +187,8 @@ def decode_base64_image(data_url: str):
 
 
 def preprocess_frame(frame):
+    # Enhances the camera frame before detection.
+    # CLAHE improves contrast, which can help YOLO detect objects in low-light scenes.
     if frame is None:
         return None
 
@@ -194,6 +216,7 @@ def make_result(
     bbox=None,
     detections=None
 ):
+    # Creates a consistent response dictionary for the frontend.
     return {
         "success": True,
         "hazard_detected": hazard_detected,
@@ -208,6 +231,7 @@ def make_result(
 
 
 def _box_area_ratio(x1, y1, x2, y2, width, height):
+    # Calculates how much of the camera frame the detected object occupies.
     box_area = max(0.0, x2 - x1) * max(0.0, y2 - y1)
     frame_area = float(width * height)
 
@@ -218,10 +242,13 @@ def _box_area_ratio(x1, y1, x2, y2, width, height):
 
 
 def _box_bottom_ratio(y2, height):
+    # Measures how close the bottom of the object is to the bottom of the frame.
+    # A higher value usually means the object is closer to the user.
     return float(y2) / max(float(height), 1.0)
 
 
 def _get_direction_label(x1, x2, width):
+    # Determines whether the object is on the left, centre, or right side.
     cx = (x1 + x2) / 2.0
 
     if cx < width * 0.34:
@@ -234,6 +261,7 @@ def _get_direction_label(x1, x2, width):
 
 
 def _get_distance_label(area_ratio, bottom_ratio):
+    # Estimates object distance using object size and vertical position.
     if area_ratio >= 0.16 or bottom_ratio >= 0.91:
         return "very_close"
 
@@ -247,6 +275,7 @@ def _get_distance_label(area_ratio, bottom_ratio):
 
 
 def _distance_phrase(distance_label):
+    # Converts distance labels into natural speech phrases.
     return {
         "very_close": "very close",
         "close": "close",
@@ -256,6 +285,7 @@ def _distance_phrase(distance_label):
 
 
 def _direction_phrase(direction_label):
+    # Converts direction labels into natural speech phrases.
     return {
         "left": "on your left",
         "center": "ahead",
@@ -264,6 +294,7 @@ def _direction_phrase(direction_label):
 
 
 def _is_relevant_box(class_name, conf, x1, y1, x2, y2, width, height):
+    # Filters weak or unrealistic detections before they become hazard alerts.
     min_conf = CLASS_MIN_CONFIDENCE.get(class_name, CONFIDENCE_THRESHOLD)
 
     if conf < min_conf:
@@ -279,6 +310,7 @@ def _is_relevant_box(class_name, conf, x1, y1, x2, y2, width, height):
     box_height = max(1.0, y2 - y1)
     aspect_ratio = box_height / box_width
 
+    # Extra filtering for person detection to reduce false person warnings.
     if class_name == "person":
         if aspect_ratio < 0.85:
             return False
@@ -293,6 +325,7 @@ def _is_relevant_box(class_name, conf, x1, y1, x2, y2, width, height):
 
 
 def _severity_weight(severity):
+    # Gives higher scoring weight to more serious hazards.
     if severity == "urgent":
         return 0.85
 
@@ -303,6 +336,7 @@ def _severity_weight(severity):
 
 
 def _class_priority(class_name):
+    # Gives some object types higher priority because they are more dangerous.
     priorities = {
         "person": 0.18,
 
@@ -335,6 +369,7 @@ def _class_priority(class_name):
 
 
 def _center_path_bonus(direction_label, distance_label):
+    # Increases score for objects in the user's walking path.
     bonus = 0.0
 
     if direction_label == "center":
@@ -376,6 +411,7 @@ def _path_blocking_bonus(x1, x2, y2, width, height):
 
 
 def _build_object_message(class_name, distance_label, direction_label, severity):
+    # Builds the spoken hazard message for the user.
     friendly_name = TARGET_CLASSES.get(class_name, ("caution", class_name))[1]
     distance_text = _distance_phrase(distance_label)
     direction_text = _direction_phrase(direction_label)
@@ -394,6 +430,7 @@ def _build_object_message(class_name, distance_label, direction_label, severity)
 
 
 def _build_detection_entry(class_name, severity, conf, x1, y1, x2, y2, width, height):
+    # Builds a full detection record with distance, direction, bounding box, and score.
     area_ratio = _box_area_ratio(x1, y1, x2, y2, width, height)
     bottom_ratio = _box_bottom_ratio(y2, height)
     distance_label = _get_distance_label(area_ratio, bottom_ratio)
@@ -402,6 +439,7 @@ def _build_detection_entry(class_name, severity, conf, x1, y1, x2, y2, width, he
     box_center_x = (x1 + x2) / 2.0
     horizontal_penalty = abs(box_center_x - width / 2.0) / max(width / 2.0, 1.0)
 
+    # Final hazard score combines confidence, size, severity, location, and path blocking.
     score = (
         (conf * 2.0)
         + (area_ratio * 4.4)
@@ -431,6 +469,7 @@ def _build_detection_entry(class_name, severity, conf, x1, y1, x2, y2, width, he
 
 
 def _suppress_weak_person_false_positive(candidates):
+    # Reduces the score of weak person detections when they may be false positives.
     if not candidates:
         return candidates
 
@@ -463,11 +502,14 @@ def _detect_generic_obstacle(frame):
 
     height, width = frame.shape[:2]
 
+    # Converts image to grayscale and smooths it before edge detection.
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
 
+    # Detects strong edges that may represent unknown objects.
     edges = cv2.Canny(blur, 70, 150)
 
+    # Focuses on the lower part of the image because close obstacles usually appear there.
     lower_half = edges[int(height * 0.35):height, :]
     contours, _ = cv2.findContours(lower_half, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -498,6 +540,7 @@ def _detect_generic_obstacle(frame):
 
         distance_label = _get_distance_label(area_ratio, bottom_ratio)
 
+        # Scores the unknown object based on size, distance, and path position.
         score = (
             area_ratio * 6.0
             + _center_path_bonus(direction_label, distance_label)
@@ -527,6 +570,9 @@ def _detect_generic_obstacle(frame):
 
 
 def detect_hazard_from_frame(frame):
+    # Main hazard detection function.
+    # Takes an OpenCV frame, runs preprocessing, YOLO detection, fallback detection,
+    # then returns the most important hazard result.
     if frame is None:
         return make_result(False, None, None, "No valid frame available.", detections=[])
 
@@ -539,6 +585,7 @@ def detect_hazard_from_frame(frame):
     target_ids = _build_target_class_ids()
 
     try:
+        # Runs YOLO prediction on CPU for Render compatibility.
         results = get_model().predict(
             source=frame,
             verbose=False,
@@ -564,6 +611,7 @@ def detect_hazard_from_frame(frame):
 
     candidates = []
 
+    # Converts YOLO detection boxes into hazard candidate entries.
     for result in results:
         boxes = result.boxes
 
@@ -599,6 +647,7 @@ def detect_hazard_from_frame(frame):
                 )
             )
 
+    # Runs fallback detection for unknown centre-path obstacles.
     generic_obstacle = _detect_generic_obstacle(frame)
 
     if generic_obstacle:
@@ -609,14 +658,17 @@ def detect_hazard_from_frame(frame):
             for item in candidates
         )
 
+        # Adds the generic obstacle only if there is no strong known centre object.
         if not strong_known_center_object:
             candidates.append(generic_obstacle)
 
+    # Reduces weak false person detections, then ranks hazards by score.
     candidates = _suppress_weak_person_false_positive(candidates)
     candidates.sort(key=lambda item: item["score"], reverse=True)
 
     top_detections = candidates[:MAX_RETURNED_DETECTIONS]
 
+    # Returns the highest scoring hazard as the main alert.
     if top_detections:
         best = top_detections[0]
 
@@ -635,5 +687,7 @@ def detect_hazard_from_frame(frame):
 
 
 def detect_hazard_from_base64(data_url):
+    # Browser-friendly entry point.
+    # Converts a base64 image into a frame and runs hazard detection.
     frame = decode_base64_image(data_url)
     return detect_hazard_from_frame(frame)
